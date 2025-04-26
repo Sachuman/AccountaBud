@@ -10,12 +10,4 @@
 //   return result.toDataStreamResponse();
 // }
 
-import { experimental_transcribe as transcribe } from 'ai';
-import { groq } from '@ai-sdk/groq';
-import { readFile } from 'fs/promises';
 
-const result = await transcribe({
-  model: groq.transcription('whisper-large-v3'),
-  audio: await readFile('audio.mp3'),
-  providerOptions: { groq: { language: 'en' } },
-});

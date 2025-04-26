@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { TreePine, Send, Mic } from "lucide-react";
 import ChatMessage from "@/components/ChatMessage";
 import TranscriptionButton from "@/components/TranscriptionButton";
@@ -10,6 +10,7 @@ import { useUIMode } from "@/contexts/UIModeContext";
 import { useChat } from "@ai-sdk/react";
 
 export default function Home() {
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const { mode, toggleMode } = useUIMode();
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -48,6 +49,21 @@ export default function Home() {
     });
   };
 
+  const handleTranscriptionComplete = (transcribedText: string) => {
+    setInput(transcribedText); // Set the transcribed text into the input
+    setIsTranscribing(false); // Clear the transcribing state
+    // Optional: Automatically send the message after transcription
+    // handleSendMessage();
+  };
+  // Handler for when the transcription button is clicked to start/stop recording
+  const handleTranscriptionButtonClick = () => {
+    // This handler is primarily to update the state in Home if needed,
+    // but the core recording logic is in TranscriptionButton.
+    // You might use this to toggle a UI indicator in Home if necessary.
+    // The TranscriptionButton itself manages its internal recording state.
+    setIsTranscribing((prev) => !prev); // Toggle transcribing state (could be refined based on start/stop)
+  };
+
   // Handler for key down events on the input
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -57,9 +73,7 @@ export default function Home() {
   };
 
   return (
-    // Main container takes full screen height
     <div className="flex flex-col h-screen bg-background">
-      {/* Header remains fixed at the top */}
       <header className="curved-header flex items-center gap-3 p-6 backdrop-blur shrink-0">
         <div className="shine-effect p-2 rounded-lg bg-background/20">
           <TreePine className="h-6 w-6 p-1 bg-emerald-950" />
@@ -93,13 +107,14 @@ export default function Home() {
                   timestamp={new Date().toLocaleTimeString()} // Placeholder
                 />
               ))}
-              {isLoading && messages[messages.length -1]?.role === 'user' && ( // Show loading only if last message was user
-                <ChatMessage
-                  isAi={true}
-                  message="..."
-                  timestamp={new Date().toLocaleTimeString()}
-                />
-              )}
+              {isLoading &&
+                messages[messages.length - 1]?.role === "user" && ( // Show loading only if last message was user
+                  <ChatMessage
+                    isAi={true}
+                    message="..."
+                    timestamp={new Date().toLocaleTimeString()}
+                  />
+                )}
               {/* Error message */}
               {error && (
                 <div className="text-red-500 text-center p-2">
@@ -109,7 +124,6 @@ export default function Home() {
             </div>
 
             <div className="fixed bottom-4 left-1/2 z-50 w-full max-w-md -translate-x-1/2 px-4">
-              {/* Flex container for input and buttons */}
               <div className="flex w-full items-center space-x-2 rounded-full border bg-background p-1 shadow-md">
                 <Input
                   type="text"
@@ -146,7 +160,10 @@ export default function Home() {
         ) : (
           // Transcription view centered
           <div className="flex-1 flex items-center justify-center">
-            <TranscriptionButton />
+            <TranscriptionButton
+              onTranscriptionComplete={handleTranscriptionComplete}
+              disabled={isLoading} // Disable transcription button if the chat is loading
+            />
           </div>
         )}
       </div>
