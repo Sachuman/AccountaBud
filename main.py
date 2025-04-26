@@ -1,9 +1,15 @@
+"""
+Main FastAPI application for LA Hacks 2025 project.
+Handles Twilio calls, reminders, and websocket communication.
+"""
+
 import os
 import json
 import base64
 import asyncio
 from contextlib import asynccontextmanager
 
+# Third-party imports
 import ngrok
 import pendulum
 import pymongo
@@ -15,32 +21,47 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
+# Local imports
 from call.bridge import GeminiAudioBridge
+
+# ============================================================================
+# Configuration and Setup
+# ============================================================================
 
 load_dotenv()
 
+# Environment variables
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 MONGO_URL = os.getenv("MONGO_URL")
 
+# MongoDB setup
 client = MongoClient(MONGO_URL)
 db = client.get_database("La-Hacks")
 action_collection = db.get_collection("action_restrictions")
 
+# Scheduler for reminders
 scheduler = BackgroundScheduler()
+
+
+# ============================================================================
+# FastAPI Application Setup
+# ============================================================================
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Set up and tear down application resources."""
+    # Setup
     listener = await ngrok.forward(8000, authtoken_from_env=True)
     app.state.ngrok_url = listener.url()
-    app.state.twilio_client = Client(
-        ACCOUNT_SID,
-        AUTH_TOKEN,
-    )
+    app.state.twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
     scheduler.start()
+
     yield
+
+    # Teardown
     listener.close()
     scheduler.shutdown()
 
@@ -49,45 +70,108 @@ app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 
 
-@app.get("/")
-async def root():
-    print("Ngrok URL:", app.state.ngrok_url)
-    return {"message": "Hello, World!"}
+# ============================================================================
+# Models
+# ============================================================================
 
 
 class BrowserUsage(BaseModel):
+    """Browser usage tracking model."""
+
     date: str
     email: str
     domain: str
     active_time: int
 
 
+class CallRequest(BaseModel):
+    """Request model for making calls."""
+
+    phone: str
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def create_twilio_call(phone: str, twiml_endpoint: str):
+    """Create a Twilio call to the specified phone number."""
+    try:
+        call = app.state.twilio_client.calls.create(
+            url=twiml_endpoint,
+            to=phone,
+            from_=TWILIO_PHONE_NUMBER,
+        )
+        return {"success": True, "sid": call.sid}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def make_reminder_call(phone: str, reminder_id: str, description: str):
+    """Make a call for a scheduled reminder."""
+    try:
+        print(f"Executing scheduled call for reminder {reminder_id}")
+        twiml_endpoint = f"{app.state.ngrok_url}/twiml"
+
+        call_result = create_twilio_call(phone, twiml_endpoint)
+        status = 200 if call_result["success"] else 500
+
+        # Update the reminder status in the database
+        action_collection.update_one(
+            {"_id": pymongo.ObjectId(reminder_id)},
+            {
+                "$set": {
+                    "last_called": pendulum.now().isoformat(),
+                    "call_status": status,
+                }
+            },
+        )
+    except Exception as e:
+        print(f"Error making reminder call: {e}")
+
+
+# ============================================================================
+# Basic Routes
+# ============================================================================
+
+
+@app.get("/")
+async def root():
+    """Root endpoint providing basic app status."""
+    print("Ngrok URL:", app.state.ngrok_url)
+    return {"message": "Hello, World!", "status": "running"}
+
+
 @app.post("/usage")
-async def usage(usage: BrowserUsage):
-    print(f"Received usage data: {usage}")
+async def usage(usage_data: BrowserUsage):
+    """Track browser usage data."""
+    print(f"Received usage data: {usage_data}")
     return {"message": "Usage data received!"}
 
 
-class CallRequest(BaseModel):
-    phone: str
+# ============================================================================
+# Call Handling Routes
+# ============================================================================
 
 
 @app.post("/call")
 def call(request: CallRequest):
+    """Initiate a call to the specified phone number."""
     phone = request.phone
     print(f"Calling {phone}...")
     twiml_endpoint = f"{app.state.ngrok_url}/twiml"
-    call = app.state.twilio_client.calls.create(
-        url=twiml_endpoint, to=phone, from_=TWILIO_PHONE_NUMBER
-    )
-    return {"message": "Call initiated!", "sid": call.sid}
+
+    result = create_twilio_call(phone, twiml_endpoint)
+    if result["success"]:
+        return {"message": "Call initiated!", "sid": result["sid"]}
+    else:
+        return {"message": "Failed to initiate call", "error": result["error"]}, 500
 
 
 @app.post("/twiml", response_class=Response)
 async def twiml(request: Request):
-    """
-    Return TwiML XML to Twilio for Media Streams setup.
-    """
+    """Return TwiML XML to Twilio for Media Streams setup."""
     wss_url = app.state.ngrok_url.replace("https", "wss")
     return templates.TemplateResponse(
         request=request,
@@ -98,10 +182,11 @@ async def twiml(request: Request):
 
 @app.websocket("/")
 async def websocket_endpoint(ws: WebSocket):
+    """Handle WebSocket connection for audio streaming."""
     await ws.accept()
 
     bridge = GeminiAudioBridge()
-    stream_sid = None
+    stream_sid: str | None = None
 
     async def send_audio_chunk(chunk: bytes):
         if not stream_sid:
@@ -128,52 +213,62 @@ async def websocket_endpoint(ws: WebSocket):
 
             if event == "start":
                 stream_sid = data["streamSid"]
-                continue
-            if event == "media" and data["media"].get("track") == "inbound":
+            elif event == "media" and data["media"].get("track") == "inbound":
                 pcm = base64.b64decode(data["media"]["payload"])
                 await bridge.add_request(pcm)
-                continue
-            if event == "stop":
+            elif event == "stop":
                 await bridge.terminate()
                 break
 
     except WebSocketDisconnect:
         await bridge.terminate()
-
     finally:
         await gemini_task
         await ws.close()
 
 
+# ============================================================================
+# Action and Restriction Routes
+# ============================================================================
+
+
 @app.get("/action/restriction/{website}")
 async def check_restriction(website: str, make_call: bool = True):
     """
-    Check if a website is restricted and optionally make a call to the associated phone number
+    Check if a website is restricted and optionally call the associated phone number.
 
     Args:
         website: Website URL to check
         make_call: If True, will make a call to the phone number if restriction exists
     """
-
     print(f"Checking restriction for {website}")
     restriction = action_collection.find_one({"website": website})
+
+    if not restriction:
+        return {"restricted": False}
+
     print(f"Restriction found: {restriction}")
 
-    if restriction and make_call and "phone" in restriction and restriction["phone"]:
+    if make_call and "phone" in restriction and restriction["phone"]:
         twiml_endpoint = f"{app.state.ngrok_url}/twiml"
-        app.state.twilio_client.calls.create(
-            url=twiml_endpoint,
-            to=restriction["phone"],
-            from_=TWILIO_PHONE_NUMBER,
-        )
+        call_result = create_twilio_call(restriction["phone"], twiml_endpoint)
+        return {"restricted": True, "call_initiated": call_result["success"]}
+
+    return {"restricted": True, "call_initiated": False}
 
 
 @app.post("/action/reminder")
 async def create_reminder(date: str, time: str, description: str, phone: str):
     """
-    Create a reminder and schedule it
-    """
+    Create a reminder and schedule it.
 
+    Args:
+        date: Date in YYYY-MM-DD format
+        time: Time in HH:MM format
+        description: Reminder description
+        phone: Phone number to call
+    """
+    # Create reminder document
     reminder = {
         "date": date,
         "time": time,
@@ -183,6 +278,7 @@ async def create_reminder(date: str, time: str, description: str, phone: str):
         "created_at": pendulum.now().isoformat(),
     }
 
+    # Store in database
     result = action_collection.insert_one(reminder)
     reminder_id = str(result.inserted_id)
 
@@ -190,7 +286,6 @@ async def create_reminder(date: str, time: str, description: str, phone: str):
     try:
         date_format = "%Y-%m-%d %H:%M"
         scheduled_time = pendulum.strptime(f"{date} {time}", date_format)
-
         job_id = f"reminder_{reminder_id}"
 
         scheduler.add_job(
@@ -220,53 +315,3 @@ async def create_reminder(date: str, time: str, description: str, phone: str):
             "message": f"Error scheduling reminder: {str(e)}",
             "id": reminder_id,
         }
-
-
-def make_reminder_call(phone, reminder_id, description):
-    """
-    Make a call for a scheduled reminder
-    """
-    try:
-        print(f"Executing scheduled call for reminder {reminder_id}")
-
-        # Custom message based on the description
-        message = f"This is a reminder about: {description}"
-
-        # Generate TwiML
-        twiml = f"""
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say>{message}</Say>
-            <Pause length="1"/>
-            <Say>This is an automated reminder. Thank you!</Say>
-        </Response>
-        """
-
-        # We need to create a temporary endpoint for this TwiML
-        # For now, we'll use the existing /twiml endpoint
-        twiml_endpoint = f"{app.state.ngrok.url()}/twiml"
-        status = 200
-
-        try:
-            app.state.twilio_client.calls.create(
-                url=twiml_endpoint,
-                to=phone,
-                from_=TWILIO_PHONE_NUMBER,
-            )
-        except Exception:
-            status = 500
-
-        # Update the reminder in the database if needed
-        # For example, mark it as completed or record the call status
-        action_collection.update_one(
-            {"_id": pymongo.ObjectId(reminder_id)},
-            {
-                "$set": {
-                    "last_called": pendulum.now().isoformat(),
-                    "call_status": status,
-                }
-            },
-        )
-
-    except Exception as e:
-        print(f"Error making reminder call: {e}")
