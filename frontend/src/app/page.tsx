@@ -1,63 +1,59 @@
 "use client";
-import { useState, useRef, useEffect } from "react"; // Import useRef and useEffect
-import { TreePine } from "lucide-react";
+
+import { useRef, useEffect } from "react";
+import { TreePine, Send, Mic } from "lucide-react";
 import ChatMessage from "@/components/ChatMessage";
-import ChatInput from "@/components/ChatInput";
 import TranscriptionButton from "@/components/TranscriptionButton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useUIMode } from "@/contexts/UIModeContext";
-
-interface Message {
-  id: number;
-  isAi: boolean;
-  text: string;
-  timestamp: string;
-}
+import { useChat } from "@ai-sdk/react";
 
 export default function Home() {
   const { mode, toggleMode } = useUIMode();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      isAi: true,
-      text: "Hello! I'm your forest guide. How can I assist you today?",
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  ]);
-  const messagesContainerRef = useRef<HTMLDivElement>(null); // Ref for the messages container
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Effect to scroll down when messages change
+  const { messages, input, setInput, append, isLoading, error } = useChat({
+    api: "/api/chat",
+    initialMessages: [
+      {
+        id: "initial-ai-message",
+        role: "assistant",
+        content: "Hello! I'm your forest guide. How can I assist you today?",
+      },
+    ],
+    onError: (err) => {
+      console.log("Chat error:", err);
+    },
+    onFinish: () => {
+      console.log("Message finished");
+      console.log("Messages:", messages);
+    },
+  });
+
   useEffect(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
-        behavior: 'smooth'
+        behavior: "smooth",
       });
     }
-  }, [messages]); // Run effect when messages array updates
+  }, [messages]);
 
-  const handleSend = (message: string) => {
-    const newMessage: Message = {
-      id: Date.now(), // Use timestamp for potentially more unique ID during rapid sends
-      isAi: false,
-      text: message,
-      timestamp: new Date().toLocaleTimeString(),
-    };
+  const handleSendMessage = () => {
+    if (!input.trim() || isLoading) return; // Prevent sending empty or while loading
+    append({
+      role: "user",
+      content: input,
+    });
+  };
 
-    // Use functional update to get the latest state
-    setMessages((prev) => [...prev, newMessage]);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: Date.now() + 1, // Use timestamp + offset
-        isAi: true,
-        text: "I understand your message and I'm here to help. What would you like to know about?",
-        timestamp: new Date().toLocaleTimeString(),
-      };
-      // Use functional update here as well
-      setMessages((prev) => [...prev, aiResponse]);
-    }, 1000);
+  // Handler for key down events on the input
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // Prevent default newline behavior
+      handleSendMessage(); // Trigger send message action
+    }
   };
 
   return (
@@ -82,29 +78,70 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Main content area takes remaining height and allows internal scrolling */}
-      <div className="flex-1 flex flex-col overflow-hidden p-4">
+      <div className="flex-1 flex flex-col overflow-hidden p-4 pb-24">
         {mode === "chat" ? (
           <>
-            {/* Scrollable messages container */}
             <div
               ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2" // Added space-y and pr for scrollbar padding
+              className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2"
             >
               {messages.map((message) => (
-                // Removed outer div with mb-4, using space-y on parent now
                 <ChatMessage
-                  key={message.id} // Key should be on the mapped element
-                  isAi={message.isAi}
-                  message={message.text}
-                  timestamp={message.timestamp}
+                  key={message.id}
+                  isAi={message.role === "assistant"}
+                  message={message.content}
+                  timestamp={new Date().toLocaleTimeString()} // Placeholder
                 />
               ))}
+              {isLoading && messages[messages.length -1]?.role === 'user' && ( // Show loading only if last message was user
+                <ChatMessage
+                  isAi={true}
+                  message="..."
+                  timestamp={new Date().toLocaleTimeString()}
+                />
+              )}
+              {/* Error message */}
+              {error && (
+                <div className="text-red-500 text-center p-2">
+                  Error: {error.message}
+                </div>
+              )}
             </div>
-            {/* Input area fixed at the bottom of the content area */}
-            <div className="shrink-0">
-              <ChatInput onSend={handleSend} />
+
+            <div className="fixed bottom-4 left-1/2 z-50 w-full max-w-md -translate-x-1/2 px-4">
+              {/* Flex container for input and buttons */}
+              <div className="flex w-full items-center space-x-2 rounded-full border bg-background p-1 shadow-md">
+                <Input
+                  type="text"
+                  value={input} // Use input state from useChat
+                  onChange={(e) => setInput(e.target.value)} // Use setInput from useChat
+                  onKeyDown={handleKeyDown} // Use the keydown handler
+                  placeholder="Ask the forest guide..."
+                  className="flex-1 border-none bg-transparent px-3 py-2 outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  disabled={isLoading} // Disable when loading
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  onClick={handleSendMessage} // Use the send handler
+                  disabled={isLoading || !input.trim()} // Disable when loading or input empty
+                  className="flex-shrink-0 rounded-full"
+                >
+                  <Send className="h-4 w-4" />
+                  <span className="sr-only">Send message</span>
+                </Button>
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="flex-shrink-0 rounded-full"
+                  disabled={isLoading} // Disable mic when loading
+                >
+                  <Mic className="h-4 w-4" />
+                  <span className="sr-only">Use microphone</span>
+                </Button>
+              </div>
             </div>
+            {/* --- End Inlined Chat Input Area --- */}
           </>
         ) : (
           // Transcription view centered
