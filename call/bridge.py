@@ -3,25 +3,36 @@ import asyncio
 from typing import Callable, Awaitable
 
 from google import genai
-from google.genai.types import Blob, Content, Part
+from google.genai.types import (
+    Blob,
+    Content,
+    Part,
+    LiveConnectConfig,
+    Modality,
+)
 from google.genai.live import AsyncSession
 
 MODEL = "models/gemini-2.0-flash-live-001"
-CONFIG = {"response_modalities": ["AUDIO"]}
+CONFIG = LiveConnectConfig(
+    response_modalities=[Modality.TEXT, Modality.AUDIO],
+    # input_audio_transcription=AudioTranscriptionConfig(),
+    # output_audio_transcription=AudioTranscriptionConfig(),
+)
 
 
 class GeminiAudioBridge:
     def __init__(self):
         self._q = asyncio.Queue()
         self.client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        self._transcript = []
 
     async def add_request(self, chunk: bytes):
         """Called by Twilio‐media handler to enqueue raw PCM."""
         await self._q.put(chunk)
 
-    def terminate(self):
+    async def terminate(self):
         """Signal end of stream."""
-        self._q.put(None)
+        await self._q.put(None)
 
     async def start(self, send_audio: Callable[[bytes], Awaitable[None]]):
         async with self.client.aio.live.connect(model=MODEL, config=CONFIG) as session:
@@ -51,3 +62,5 @@ class GeminiAudioBridge:
         async for message in session.receive():
             if data := message.data:
                 await send_audio(data)
+            # if text := message.text:
+            #     self._transcript.append(text)
