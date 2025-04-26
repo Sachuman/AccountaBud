@@ -17,7 +17,8 @@ load_dotenv()
 
 # Environment variables
 RETELL_API_KEY = os.getenv("RETELL_API_KEY")
-AGENT_ID = os.getenv("RETELL_AGENT_ID")
+AGENT_ID_RESTRICTION = os.getenv("RETELL_AGENT_ID_RESTRICTION")
+AGENT_ID_REMINDER = os.getenv("RETELL_AGENT_ID_REMINDER")
 MONGO_URL = os.getenv("MONGO_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RETELL_PHONE_NUMBER = os.getenv("RETELL_PHONE_NUMBER")
@@ -72,6 +73,16 @@ class BrowserUsage(BaseModel):
     email: str
     domain: str
     active_time: int
+
+
+@app.post("/browser-usage")
+async def browser_usage(data: list[BrowserUsage]):
+    for usage in data:
+        res = await check_restriction(usage.domain)
+        if res["restricted"]:
+            break
+
+    return {"message": "Browser usage processed"}
 
 
 class TranscriptRequest(BaseModel):
@@ -193,15 +204,12 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
     Make a call to remind the user
     """
     try:
-        # Define initial message for the call
-        initial_message = f"This is your reminder about: {description}"
-
         # Request body for RetellAI call API
         call_payload = {
-            "agent_id": AGENT_ID,
             "to_number": phone,
             "from_number": RETELL_PHONE_NUMBER,
-            "initial_message": initial_message,
+            "override_agent_id": AGENT_ID_REMINDER,
+            ## add description for which reminder
         }
 
         # Make API call to RetellAI
@@ -211,18 +219,11 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
             json=call_payload,
         )
 
-        if response.status_code == 200:
-            # Update reminder status in database
-            reminder_collection.update_one(
-                {"_id": reminder_id},
-                {
-                    "$set": {
-                        "status": "called",
-                        "called_at": datetime.datetime.now().isoformat(),
-                    }
-                },
+        # The response is successful if we get a call_id back
+        if "call_id" in response.json():
+            print(
+                f"Reminder call initiated successfully: {response.json()['call_id']} for {description}"
             )
-            print(f"Made reminder call to {phone} about {description}")
         else:
             print(f"Error making reminder call: {response.text}")
 
@@ -247,10 +248,9 @@ async def check_restriction(domain: str, make_call: bool = True):
         try:
             # Make call using RetellAI
             call_payload = {
-                "agent_id": AGENT_ID,
                 "to_number": restriction["phone"],
                 "from_number": RETELL_PHONE_NUMBER,
-                "initial_message": f"This is a reminder that {domain} is restricted. Reason: {restriction.get('description', 'Not specified')}",
+                "override_agent_id": AGENT_ID_RESTRICTION,
             }
 
             response = requests.post(
@@ -259,7 +259,11 @@ async def check_restriction(domain: str, make_call: bool = True):
                 json=call_payload,
             )
 
-            if response.status_code != 200:
+            if "call_id" in response.json():
+                print(
+                    f"Restriction notification call initiated successfully: {response.json()['call_id']}"
+                )
+            else:
                 print(f"Error making restriction notification call: {response.text}")
 
         except Exception as e:

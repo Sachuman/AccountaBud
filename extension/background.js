@@ -56,7 +56,7 @@ async function sendUsageReport() {
 
     console.log('Sending usage alert...', records);
 
-    await fetch('https://your.backend.example.com/usage', {
+    await fetch('http://localhost:8000/browser-usage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(records)
