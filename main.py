@@ -198,8 +198,10 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
         call_payload = {
             "to_number": phone,
             "from_number": RETELL_PHONE_NUMBER,
-            "override_agent_id":AGENT_ID_REMINDER
-            ## add description for which reminder
+            "override_agent_id":AGENT_ID_REMINDER,
+            "retell_llm_dynamic_variables": {
+                "reminder_description": {description}
+            }
 
         }
 
@@ -240,7 +242,10 @@ async def check_restriction(domain: str, make_call: bool = True):
             call_payload = {
                 "to_number": restriction["phone"],
                 "from_number": RETELL_PHONE_NUMBER,
-                "override_agent_id": AGENT_ID_RESTRICTION
+                "override_agent_id": AGENT_ID_RESTRICTION,
+                "retell_llm_dynamic_variables": {
+                "reminder_description": {restriction.get("domain")}
+            }
 
             }
 
