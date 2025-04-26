@@ -200,7 +200,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 @app.get("/action/restriction/{website}")
-async def check_restriction(website: str, make_call: bool = True):
+async def check_restriction(website: str):
     """
     Check if a website is restricted and optionally call the associated phone number.
 
@@ -216,7 +216,7 @@ async def check_restriction(website: str, make_call: bool = True):
 
     print(f"Restriction found: {restriction}")
 
-    if make_call and "phone" in restriction and restriction["phone"]:
+    if restriction.get("phone", None):
         twiml_endpoint = f"{app.state.ngrok_url}/twiml"
         call_result = create_twilio_call(restriction["phone"], twiml_endpoint)
         return {"restricted": True, "call_initiated": call_result["success"]}
