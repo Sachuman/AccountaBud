@@ -263,7 +263,7 @@ async def create_reminder(date: str, time: str, description: str, phone: str):
     # Schedule the reminder
     try:
         date_format = "%Y-%m-%d %H:%M"
-        scheduled_time = pendulum.strptime(f"{date} {time}", date_format)
+        scheduled_time = pendulum.from_format(f"{date} {time}", date_format)
         job_id = f"reminder_{reminder_id}"
 
         scheduler.add_job(
