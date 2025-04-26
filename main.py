@@ -1,295 +1,358 @@
-"""
-Main FastAPI application for LA Hacks 2025 project.
-Handles Twilio calls, reminders, and websocket communication.
-"""
-
 import os
 import json
+import datetime
 from contextlib import asynccontextmanager
+from typing import Dict, Any, List
 
-# Third-party imports
 import ngrok
-import pendulum
-import pymongo
-from twilio.rest import Client
-from fastapi import FastAPI, Request, Response, WebSocket
-from fastapi.templating import Jinja2Templates
-from apscheduler.schedulers.background import BackgroundScheduler
+import requests
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import google.generativeai as genai
 
-# Local imports
-from call.call import start_call
-
-# ============================================================================
-# Configuration and Setup
-# ============================================================================
 
 load_dotenv()
 
 # Environment variables
-ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+RETELL_API_KEY = os.getenv("RETELL_API_KEY")
+AGENT_ID = os.getenv("RETELL_AGENT_ID")
 MONGO_URL = os.getenv("MONGO_URL")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # MongoDB setup
 client = MongoClient(MONGO_URL)
 db = client.get_database("La-Hacks")
 action_collection = db.get_collection("action_restrictions")
+reminder_collection = db.get_collection("action_reminders")
 
-# Scheduler for reminders
-scheduler = BackgroundScheduler()
-
-
-# ============================================================================
-# FastAPI Application Setup
-# ============================================================================
-
+# Initialize scheduler for reminders
+scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Set up and tear down application resources."""
-    # Setup
+    # Setup ngrok
     listener = await ngrok.forward(8000, authtoken_from_env=True)
     app.state.ngrok_url = listener.url()
-    app.state.twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
+    
+    # Setup RetellAI client
+    app.state.retell_headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {RETELL_API_KEY}"
+    }
+    
+    # Setup Gemini model
+    genai.configure(api_key=GEMINI_API_KEY)
+    app.state.gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+
+
+    
+    # Start scheduler
     scheduler.start()
-
+    
     yield
-
-    # Teardown
-    listener.close()
+    
+    # Cleanup
     scheduler.shutdown()
-
+    listener.close()
 
 app = FastAPI(lifespan=lifespan)
-templates = Jinja2Templates(directory="templates")
 
-
-# ============================================================================
-# Models
-# ============================================================================
-
+@app.get("/")
+async def root():
+    print("Ngrok URL:", app.state.ngrok_url)
+    return {"message": "Hello, World!"}
 
 class BrowserUsage(BaseModel):
-    """Browser usage tracking model."""
-
     date: str
     email: str
     domain: str
     active_time: int
 
 
-class CallRequest(BaseModel):
-    """Request model for making calls."""
+class TranscriptRequest(BaseModel):
+    transcript: str
 
-    phone: str
+@app.post("/process-transcript")
+async def process_transcript_endpoint(data: TranscriptRequest, background_tasks: BackgroundTasks):
+    """
+    Process transcript using Gemini and store in database
+    """
+    background_tasks.add_task(process_transcript, data.transcript)
+    return {"status": "processing"}
 
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-
-def create_twilio_call(phone: str, twiml_endpoint: str):
-    """Create a Twilio call to the specified phone number."""
+async def process_transcript(transcript: str):
+    """
+    Process transcript using Gemini to determine intent and structure
+    """
+    prompt = f"""
+    Analyze the following transcript from a phone call and determine if it's for:
+    1. Setting a restriction on a website
+    2. Setting a reminder for a task
+    
+    If it's a restriction, extract:
+    - domain (the website to restrict)
+    - description (reason for restriction)
+    - phone (the user's phone number if mentioned, otherwise set to empty string)
+    
+    If it's a reminder, extract:
+    - date (in YYYY-MM-DD format, use today's date if not specified)
+    - time (in HH:MM format)
+    - description (what to remind about)
+    - phone (the user's phone number if mentioned, otherwise set to empty string)
+    
+    RESPOND ONLY WITH A VALID JSON OBJECT. Do not include any explanations, markdown formatting, or code blocks.
+    The JSON must have a "type" field that is either "RESTRICTION" or "reminder", plus the other extracted fields.
+    
+    Example response for a reminder:
+    {{"type": "reminder", "date": "2023-04-15", "time": "07:00", "description": "Wake up call", "phone": "+1234567890"}}
+    
+    Example response for a restriction:
+    {{"type": "RESTRICTION", "domain": "facebook.com", "description": "Avoid social media", "phone": "+1234567890"}}
+    
+    Transcript: {transcript}
+    """
+    
     try:
-        call = app.state.twilio_client.calls.create(
-            url=twiml_endpoint,
-            to=phone,
-            from_=TWILIO_PHONE_NUMBER,
-        )
-        return {"success": True, "sid": call.sid}
+        response = app.state.gemini_model.generate_content(prompt)
+        
+        response_text = response.text
+        
+        import re
+        json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response_text, re.DOTALL)
+        
+        if json_match:
+            result = json.loads(json_match.group(1))
+        else:
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError:
+
+                cleaned_text = response_text.strip()
+                start = cleaned_text.find('{')
+                end = cleaned_text.rfind('}') + 1
+                
+                if start >= 0 and end > start:
+                    json_str = cleaned_text[start:end]
+                    result = json.loads(json_str)
+                else:
+                    
+                    print(f"Could not parse JSON from response: {response_text}")
+                    result = {
+                        "type": "unknown",
+                        "description": "Failed to parse response",
+                        "raw_response": response_text[:200] 
+                    }
+        
+        # Add current date and timestamp
+        result["created_at"] = datetime.datetime.now().isoformat()
+        
+        if result["type"] == "RESTRICTION":
+            # Store restriction in database
+            action_collection.insert_one(result)
+            print(f"Stored new restriction: {result}")
+        
+        elif result["type"] == "reminder":
+            # Store reminder in database
+            reminder_id = reminder_collection.insert_one(result).inserted_id
+            
+            # Schedule reminder if time is specified
+            if result.get("time") and result.get("phone"):
+                schedule_reminder(
+                    str(reminder_id), 
+                    result["date"], 
+                    result["time"], 
+                    result["phone"], 
+                    result["description"]
+                )
+                print(f"Scheduled reminder: {result}")
+        
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"Error processing transcript: {e}")
+        print(f"Response text: {response.text if 'response' in locals() else 'No response'}")
 
-
-def make_reminder_call(phone: str, reminder_id: str, description: str):
-    """Make a call for a scheduled reminder."""
+def schedule_reminder(reminder_id: str, date_str: str, time_str: str, phone: str, description: str):
+    """
+    Schedule a reminder call
+    """
     try:
-        print(f"Executing scheduled call for reminder {reminder_id}")
-        twiml_endpoint = f"{app.state.ngrok_url}/twiml"
-
-        call_result = create_twilio_call(phone, twiml_endpoint)
-        status = 200 if call_result["success"] else 500
-
-        # Update the reminder status in the database
-        action_collection.update_one(
-            {"_id": pymongo.ObjectId(reminder_id)},
-            {
-                "$set": {
-                    "last_called": pendulum.now().isoformat(),
-                    "call_status": status,
-                }
-            },
-        )
-    except Exception as e:
-        print(f"Error making reminder call: {e}")
-
-
-# ============================================================================
-# Basic Routes
-# ============================================================================
-
-
-@app.get("/")
-async def root():
-    """Root endpoint providing basic app status."""
-    print("Ngrok URL:", app.state.ngrok_url)
-    return {"message": "Hello, World!", "status": "running"}
-
-
-@app.post("/usage")
-async def usage(usage_data: BrowserUsage):
-    """Track browser usage data."""
-    print(f"Received usage data: {usage_data}")
-    return {"message": "Usage data received!"}
-
-
-# ============================================================================
-# Call Handling Routes
-# ============================================================================
-
-
-@app.post("/call")
-def call(request: CallRequest):
-    """Initiate a call to the specified phone number."""
-    phone = request.phone
-    print(f"Calling {phone}...")
-    twiml_endpoint = f"{app.state.ngrok_url}/twiml"
-
-    result = create_twilio_call(phone, twiml_endpoint)
-    if result["success"]:
-        return {"message": "Call initiated!", "sid": result["sid"]}
-    else:
-        return {"message": "Failed to initiate call", "error": result["error"]}, 500
-
-
-@app.post("/twiml", response_class=Response)
-async def twiml(request: Request):
-    """Return TwiML XML to Twilio for Media Streams setup."""
-    wss_url = app.state.ngrok_url.replace("https", "wss")
-    callback_url = f"{app.state.ngrok_url}/transcribe"
-    return templates.TemplateResponse(
-        request=request,
-        name="streams.xml",
-        context={"url": wss_url, "callback_url": callback_url},
-    )
-
-
-@app.websocket("/")
-async def websocket_endpoint(ws: WebSocket):
-    """Handle WebSocket connection for audio streaming."""
-    await ws.accept()
-
-    start_data = ws.iter_text()
-    await start_data.__anext__()
-    call_data = json.loads(await start_data.__anext__())
-    print(call_data, flush=True)
-
-    stream_sid = call_data["start"]["streamSid"]
-    print("WebSocket connection accepted")
-
-    await start_call(ws, stream_sid)
-
-
-@app.post("/transcribe")
-def transcribe(request: Request):
-    """Handle transcription callback from Twilio."""
-    data = request.json()
-    text = data["TranscriptionText"]
-    print(f"Transcription received: {text}")
-    # TODO: handle the transcription text
-
-
-# ============================================================================
-# Action and Restriction Routes
-# ============================================================================
-
-
-@app.get("/action/restriction/")
-async def check_restriction(usage: BrowserUsage):
-    """
-    Check if a website is restricted and optionally call the associated phone number.
-
-    Args:
-        website: Website URL to check
-        make_call: If True, will make a call to the phone number if restriction exists
-    """
-    domain = usage.domain
-    print(f"Checking restriction for {domain}")
-    restriction = action_collection.find_one({"domain": domain})
-
-    if not restriction:
-        return {"restricted": False}
-
-    print(f"Restriction found: {restriction}")
-
-    if restriction.get("phone", None):
-        twiml_endpoint = f"{app.state.ngrok_url}/twiml"
-        call_result = create_twilio_call(restriction["phone"], twiml_endpoint)
-        return {"restricted": True, "call_initiated": call_result["success"]}
-
-    return {"restricted": True, "call_initiated": False}
-
-
-@app.post("/action/reminder")
-async def create_reminder(date: str, time: str, description: str, phone: str):
-    """
-    Create a reminder and schedule it.
-
-    Args:
-        date: Date in YYYY-MM-DD format
-        time: Time in HH:MM format
-        description: Reminder description
-        phone: Phone number to call
-    """
-    # Create reminder document
-    reminder = {
-        "date": date,
-        "time": time,
-        "description": description,
-        "type": "reminder",
-        "phone": phone,
-        "created_at": pendulum.now().isoformat(),
-    }
-
-    # Store in database
-    result = action_collection.insert_one(reminder)
-    reminder_id = str(result.inserted_id)
-
-    # Schedule the reminder
-    try:
-        date_format = "%Y-%m-%d %H:%M"
-        scheduled_time = pendulum.from_format(f"{date} {time}", date_format)
-        job_id = f"reminder_{reminder_id}"
-
+        # Parse date and time
+        reminder_datetime = datetime.datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        
+        # Add job to scheduler
         scheduler.add_job(
             make_reminder_call,
-            "date",
-            run_date=scheduled_time,
-            args=[phone, reminder_id, description],
-            id=job_id,
-            replace_existing=True,
+            'date',
+            run_date=reminder_datetime,
+            args=[reminder_id, phone, description]
         )
-
-        return {
-            "success": True,
-            "message": f"Reminder created and scheduled for {date} {time}",
-            "id": reminder_id,
-            "scheduled_time": scheduled_time.isoformat(),
-        }
-    except ValueError:
-        return {
-            "success": False,
-            "message": f"Invalid date or time format: {date} {time}. Use YYYY-MM-DD and HH:MM formats.",
-            "id": reminder_id,
-        }
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Error scheduling reminder: {str(e)}",
-            "id": reminder_id,
+        print(f"Error scheduling reminder: {e}")
+
+async def make_reminder_call(reminder_id: str, phone: str, description: str):
+    """
+    Make a call to remind the user
+    """
+    try:
+        # Define initial message for the call
+        initial_message = f"This is your reminder about: {description}"
+        
+        # Request body for RetellAI call API
+        call_payload = {
+            "agent_id": AGENT_ID,
+            "customer_number": phone,
+            "initial_message": initial_message
         }
+        
+        # Make API call to RetellAI
+        response = requests.post(
+            "https://api.retellai.com/v1/calls",
+            headers=app.state.retell_headers,
+            json=call_payload
+        )
+        
+        if response.status_code == 200:
+            # Update reminder status in database
+            reminder_collection.update_one(
+                {"_id": reminder_id},
+                {"$set": {"status": "called", "called_at": datetime.datetime.now().isoformat()}}
+            )
+            print(f"Made reminder call to {phone} about {description}")
+        else:
+            print(f"Error making reminder call: {response.text}")
+            
+    except Exception as e:
+        print(f"Error in make_reminder_call: {e}")
+
+# @app.get("/action/restriction/{domain}")
+# async def check_restriction(domain: str, make_call: bool = True):
+#     """
+#     Check if a website is restricted for Chrome extension
+#     """
+#     print(f"Checking restriction for {domain}")
+#     restriction = action_collection.find_one({"domain": domain})
+    
+#     if not restriction:
+#         return {"restricted": False}
+    
+#     print(f"Restriction found: {restriction}")
+    
+#     # If restriction exists and call should be made
+#     if make_call and restriction.get("phone"):
+#         try:
+#             # Make call using RetellAI
+#             call_payload = {
+#                 "agent_id": AGENT_ID,
+#                 "customer_number": restriction["phone"],
+#                 "initial_message": f"This is a reminder that {domain} is restricted. Reason: {restriction.get('description', 'Not specified')}"
+#             }
+            
+#             response = requests.post(
+#                 "https://api.retellai.com/v1/calls",
+#                 headers=app.state.retell_headers,
+#                 json=call_payload
+#             )
+            
+#             if response.status_code != 200:
+#                 print(f"Error making restriction notification call: {response.text}")
+        
+#         except Exception as e:
+#             print(f"Error making restriction notification call: {e}")
+    
+#     return {"restricted": True, "description": restriction.get("description")}
+
+@app.post("/action/restriction")
+async def create_restriction(request: Request):
+    """
+    Create a new restriction
+    """
+    data = await request.json()
+    
+    # Validate data
+    required_fields = ["domain", "description"]
+    for field in required_fields:
+        if field not in data:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    
+    # Add created_at timestamp and type
+    data["created_at"] = datetime.datetime.now().isoformat()
+    data["type"] = "RESTRICTION"
+    
+    # Insert into database
+    restriction_id = action_collection.insert_one(data).inserted_id
+    
+    return {"message": "Restriction created", "id": str(restriction_id)}
+
+# @app.get("/action/reminder/{date}")
+# async def get_reminders(date: str):
+#     """
+#     Get all reminders for a specific date
+#     """
+#     reminders = list(reminder_collection.find({"date": date}))
+    
+#     # Convert ObjectId to string for JSON serialization
+#     for reminder in reminders:
+#         reminder["_id"] = str(reminder["_id"])
+    
+#     return {"reminders": reminders}
+
+@app.post("/action/reminder")
+async def create_reminder(request: Request):
+    """
+    Create a new reminder
+    """
+    data = await request.json()
+    
+    # Validate data
+    required_fields = ["date", "description"]
+    for field in required_fields:
+        if field not in data:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    
+    # Add created_at timestamp and type
+    data["created_at"] = datetime.datetime.now().isoformat()
+    data["type"] = "reminder"
+    
+    # Insert into database
+    reminder_id = reminder_collection.insert_one(data).inserted_id
+    
+    # Schedule reminder if time is specified
+    if data.get("time") and data.get("phone"):
+        schedule_reminder(
+            str(reminder_id),
+            data["date"],
+            data["time"],
+            data["phone"],
+            data["description"]
+        )
+    
+    return {"message": "Reminder created", "id": str(reminder_id)}
+
+@app.post("/action/process-example")
+async def process_example():
+    """
+    Process example transcript for testing
+    """
+    # Example transcript
+    transcript = """
+    Agent: Hey [Name], it's Sam from WakeUp Together! I'm calling to help you stay on track with your goal of waking up at 5:30am every day. Would you like me to call you around that time daily to check in?
+    User: Yes. That would work.
+    Agent: Awesome! Should we kick 
+    User: Wait. Actually, no. 
+    Agent: it off tomorrow morning, 
+    User: Hold on. Can you call me at seven AM every day?
+    Agent: No problem! So, you'd like me to call you at 7:00 AM every day instead?
+    User: Yeah. That would be great.
+    Agent: Perfect! Should we start tomorrow morning, then?
+    User: Yeah. Sounds good. Thanks. Bye bye.
+    Agent: Okay, great! Would you like the call to be a quick pep talk, like a
+    """
+    
+    await process_transcript(transcript)
+    return {"message": "Example transcript processed"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
