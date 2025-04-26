@@ -3,7 +3,7 @@
 
 To install the dependencies for this script, run:
 
-``` 
+```bash
 pip install google-genai pyaudio dotenv
 ```
 

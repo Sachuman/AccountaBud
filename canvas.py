@@ -1,11 +1,14 @@
+from dotenv import load_dotenv
 import requests
 import os
 import json
 
+load_dotenv()  # Load environment variables from .env file
+
 API_URL = "https://canvas.eee.uci.edu/api/v1"
 TARGET_GRADE_PERCENTAGE = 93.0
 
-API_TOKEN = ""
+API_TOKEN = os.getenv("CANVAS_API_KEY")
 
 if not API_TOKEN:
     print(
