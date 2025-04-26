@@ -20,3 +20,8 @@ async def root():
 async def usage(usage: BrowserUsage):
     print(f"Received usage data: {usage}")
     return {"message": "Usage data received!"}
+
+
+@app.post("/call")
+async def call():
+    return {"message": "Call request received!"}

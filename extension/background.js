@@ -48,13 +48,13 @@ async function sendUsageReport() {
     const times = await getTimes();
     if (times.length === 0) return;
 
-    console.log('Sending usage alert...', records);
-
     const date = new Date().toLocaleDateString();
     const email = (await chrome.identity.getProfileUserInfo()).email;
     const records = Object.entries(times).map(
         ([domain, active_sec]) => ({ date, email, domain, active_sec })
     );
+
+    console.log('Sending usage alert...', records);
 
     await fetch('https://your.backend.example.com/usage', {
         method: 'POST',
