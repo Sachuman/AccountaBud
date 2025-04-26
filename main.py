@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import ngrok
 import requests
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -20,6 +20,7 @@ RETELL_API_KEY = os.getenv("RETELL_API_KEY")
 AGENT_ID = os.getenv("RETELL_AGENT_ID")
 MONGO_URL = os.getenv("MONGO_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+RETELL_PHONE_NUMBER = os.getenv("RETELL_PHONE_NUMBER")
 
 # MongoDB setup
 client = MongoClient(MONGO_URL)
@@ -198,13 +199,14 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
         # Request body for RetellAI call API
         call_payload = {
             "agent_id": AGENT_ID,
-            "customer_number": phone,
+            "to_number": phone,
+            "from_number": RETELL_PHONE_NUMBER,
             "initial_message": initial_message,
         }
 
         # Make API call to RetellAI
         response = requests.post(
-            "https://api.retellai.com/v1/calls",
+            "https://api.retellai.com/v2/create-phone-call",
             headers=app.state.retell_headers,
             json=call_payload,
         )
@@ -228,39 +230,42 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
         print(f"Error in make_reminder_call: {e}")
 
 
-@app.post("/action/reminder")
-async def create_reminder(request: Request):
+@app.post("/action/restriction/{domain}")
+async def check_restriction(domain: str, make_call: bool = True):
     """
-    Create a new reminder
+    Check if a website is restricted for Chrome extension
     """
-    data = await request.json()
+    print(f"Checking restriction for {domain}")
+    restriction = action_collection.find_one({"domain": domain})
 
-    # Validate data
-    required_fields = ["date", "description"]
-    for field in required_fields:
-        if field not in data:
-            raise HTTPException(
-                status_code=400, detail=f"Missing required field: {field}"
+    if not restriction:
+        return {"restricted": False}
+
+    print(f"Restriction found: {restriction}")
+
+    if make_call and restriction.get("phone"):
+        try:
+            # Make call using RetellAI
+            call_payload = {
+                "agent_id": AGENT_ID,
+                "to_number": restriction["phone"],
+                "from_number": RETELL_PHONE_NUMBER,
+                "initial_message": f"This is a reminder that {domain} is restricted. Reason: {restriction.get('description', 'Not specified')}",
+            }
+
+            response = requests.post(
+                "https://api.retellai.com/v2/create-phone-call",
+                headers=app.state.retell_headers,
+                json=call_payload,
             )
 
-    # Add created_at timestamp and type
-    data["created_at"] = datetime.datetime.now().isoformat()
-    data["type"] = "reminder"
+            if response.status_code != 200:
+                print(f"Error making restriction notification call: {response.text}")
 
-    # Insert into database
-    reminder_id = reminder_collection.insert_one(data).inserted_id
+        except Exception as e:
+            print(f"Error making restriction notification call: {e}")
 
-    # Schedule reminder if time is specified
-    if data.get("time") and data.get("phone"):
-        schedule_reminder(
-            str(reminder_id),
-            data["date"],
-            data["time"],
-            data["phone"],
-            data["description"],
-        )
-
-    return {"message": "Reminder created", "id": str(reminder_id)}
+    return {"restricted": True, "description": restriction.get("description")}
 
 
 @app.post("/action/process-example")
