@@ -9,11 +9,14 @@ import { useUIMode } from "@/contexts/UIModeContext";
 interface TranscriptionButtonProps {
   onTranscriptionComplete: (text: string) => void;
   disabled?: boolean;
+  handleSendMessage?: () => void; // Optional: for future use if needed
+  setInput?: (text: string) => void; // Optional: for future use if needed
 }
 
 const TranscriptionButton: React.FC<TranscriptionButtonProps> = ({
   onTranscriptionComplete,
   disabled = false,
+  handleSendMessage,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +94,9 @@ const TranscriptionButton: React.FC<TranscriptionButtonProps> = ({
 
           if (data.text) {
             onTranscriptionComplete(data.text);
+            handleSendMessage?.(); // Call this function to send the message after transcription
+            setIsLoading(false);
+            setIsRecording(false);
           } else {
             throw new Error("No transcription text returned");
           }
@@ -99,6 +105,7 @@ const TranscriptionButton: React.FC<TranscriptionButtonProps> = ({
           // You could add UI feedback for errors here
         } finally {
           setIsLoading(false);
+          setIsRecording(false);
           // Always clean up the audio stream
           if (audioStreamRef.current) {
             audioStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -120,6 +127,9 @@ const TranscriptionButton: React.FC<TranscriptionButtonProps> = ({
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
     }
+    setIsRecording(false);
+    setIsLoading(false);
+    handleSendMessage?.(); // Call this function to send the message after stopping recording
   };
 
   const buttonIcon = isLoading ? (
