@@ -52,16 +52,10 @@ export default function Home() {
   const handleTranscriptionComplete = (transcribedText: string) => {
     setInput(transcribedText); // Set the transcribed text into the input
     setIsTranscribing(false); // Clear the transcribing state
-    // Optional: Automatically send the message after transcription
-    // handleSendMessage();
+
   };
-  // Handler for when the transcription button is clicked to start/stop recording
   const handleTranscriptionButtonClick = () => {
-    // This handler is primarily to update the state in Home if needed,
-    // but the core recording logic is in TranscriptionButton.
-    // You might use this to toggle a UI indicator in Home if necessary.
-    // The TranscriptionButton itself manages its internal recording state.
-    setIsTranscribing((prev) => !prev); // Toggle transcribing state (could be refined based on start/stop)
+    setIsTranscribing((prev) => !prev); 
   };
 
   // Handler for key down events on the input
@@ -155,10 +149,8 @@ export default function Home() {
                 </Button>
               </div>
             </div>
-            {/* --- End Inlined Chat Input Area --- */}
           </>
         ) : (
-          // Transcription view centered
           <div className="flex-1 flex items-center justify-center">
             <TranscriptionButton
               onTranscriptionComplete={handleTranscriptionComplete}
