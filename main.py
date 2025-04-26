@@ -171,10 +171,11 @@ def call(request: CallRequest):
 async def twiml(request: Request):
     """Return TwiML XML to Twilio for Media Streams setup."""
     wss_url = app.state.ngrok_url.replace("https", "wss")
+    callback_url = f"{app.state.ngrok_url}/transcribe"
     return templates.TemplateResponse(
         request=request,
         name="streams.xml",
-        context={"url": wss_url},
+        context={"url": wss_url, "callback_url": callback_url},
     )
 
 
@@ -194,13 +195,22 @@ async def websocket_endpoint(ws: WebSocket):
     await start_call(ws, stream_sid)
 
 
+@app.post("/transcribe")
+def transcribe(request: Request):
+    """Handle transcription callback from Twilio."""
+    data = request.json()
+    text = data["TranscriptionText"]
+    print(f"Transcription received: {text}")
+    # TODO: handle the transcription text
+
+
 # ============================================================================
 # Action and Restriction Routes
 # ============================================================================
 
 
-@app.get("/action/restriction/{website}")
-async def check_restriction(website: str):
+@app.get("/action/restriction/")
+async def check_restriction(usage: BrowserUsage):
     """
     Check if a website is restricted and optionally call the associated phone number.
 
@@ -208,8 +218,9 @@ async def check_restriction(website: str):
         website: Website URL to check
         make_call: If True, will make a call to the phone number if restriction exists
     """
-    print(f"Checking restriction for {website}")
-    restriction = action_collection.find_one({"website": website})
+    domain = usage.domain
+    print(f"Checking restriction for {domain}")
+    restriction = action_collection.find_one({"domain": domain})
 
     if not restriction:
         return {"restricted": False}

@@ -3,4 +3,10 @@
   <Connect>
     <Stream url="{{ url }}"></Stream>
   </Connect>
+  <Response>
+    <Record timeout="10"
+      transcribe="true"
+      recordingStatusCallback="{{ callback_url }}"
+    />
+  </Response>
 </Response>
