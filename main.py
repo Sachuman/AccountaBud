@@ -5,8 +5,6 @@ Handles Twilio calls, reminders, and websocket communication.
 
 import os
 import json
-import base64
-import asyncio
 from contextlib import asynccontextmanager
 
 # Third-party imports
@@ -14,7 +12,7 @@ import ngrok
 import pendulum
 import pymongo
 from twilio.rest import Client
-from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
 from pydantic import BaseModel
@@ -22,7 +20,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 
 # Local imports
-from call.bridge import GeminiAudioBridge
+from call.call import start_call
 
 # ============================================================================
 # Configuration and Setup
@@ -185,46 +183,15 @@ async def websocket_endpoint(ws: WebSocket):
     """Handle WebSocket connection for audio streaming."""
     await ws.accept()
 
-    bridge = GeminiAudioBridge()
-    stream_sid: str | None = None
+    start_data = ws.iter_text()
+    await start_data.__anext__()
+    call_data = json.loads(await start_data.__anext__())
+    print(call_data, flush=True)
 
-    async def send_audio_chunk(chunk: bytes):
-        if not stream_sid:
-            return
+    stream_sid = call_data["start"]["streamSid"]
+    print("WebSocket connection accepted")
 
-        await ws.send_json(
-            {
-                "event": "media",
-                "media": {
-                    "payload": base64.b64encode(chunk).decode(),
-                    "track": "outbound",
-                },
-                "streamSid": stream_sid,
-            }
-        )
-
-    gemini_task = asyncio.create_task(bridge.start(send_audio_chunk))
-
-    try:
-        while True:
-            msg = await ws.receive_text()
-            data = json.loads(msg)
-            event = data.get("event")
-
-            if event == "start":
-                stream_sid = data["streamSid"]
-            elif event == "media" and data["media"].get("track") == "inbound":
-                pcm = base64.b64decode(data["media"]["payload"])
-                await bridge.add_request(pcm)
-            elif event == "stop":
-                await bridge.terminate()
-                break
-
-    except WebSocketDisconnect:
-        await bridge.terminate()
-    finally:
-        await gemini_task
-        await ws.close()
+    await start_call(ws, stream_sid)
 
 
 # ============================================================================
