@@ -32,15 +32,15 @@ async function recordActiveTime() {
     });
     if (!tab?.url) return;
 
-    let domain;
+    let hostname;
     try {
-        domain = new URL(tab.url).hostname;
+        hostname = new URL(tab.url).hostname;
     } catch {
         return; // skip invalid URLs
     }
 
     const times = await getTimes();
-    times[domain] = (times[domain] || 0) + (RECORD_INTERVAL_MIN * 60);
+    times[hostname] = (times[hostname] || 0) + (RECORD_INTERVAL_MIN * 60);
     await chrome.storage.local.set({ [TIMES_KEY]: times });
 }
 
@@ -51,17 +51,22 @@ async function sendUsageReport() {
     const date = new Date().toLocaleDateString();
     const email = (await chrome.identity.getProfileUserInfo()).email;
     const records = Object.entries(times).map(
-        ([domain, active_sec]) => ({ date, email, domain, active_sec })
+        ([hostname, active_sec]) => ({ date, email, hostname, active_sec })
     );
 
     console.log('Sending usage alert...', records);
 
-    await fetch('http://localhost:8000/browser-usage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(records)
-    });
-
+    try {
+        await fetch('http://localhost:8000/browser-usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(records)
+        });
+        console.log('Usage report sent successfully');
+    }
+    catch (error) {
+        console.error('Error sending usage report:', error);
+    }
 }
 
 async function getTimes() {
