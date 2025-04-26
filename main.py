@@ -17,7 +17,8 @@ load_dotenv()
 
 # Environment variables
 RETELL_API_KEY = os.getenv("RETELL_API_KEY")
-AGENT_ID = os.getenv("RETELL_AGENT_ID")
+AGENT_ID_RESTRICTION = os.getenv("RETELL_AGENT_ID_RESTRICTION")
+AGENT_ID_REMINDER = os.getenv("RETELL_AGENT_ID_REMINDER")
 MONGO_URL = os.getenv("MONGO_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RETELL_PHONE_NUMBER = os.getenv("RETELL_PHONE_NUMBER")
@@ -193,15 +194,13 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
     Make a call to remind the user
     """
     try:
-        # Define initial message for the call
-        initial_message = f"This is your reminder about: {description}"
-
         # Request body for RetellAI call API
         call_payload = {
-            "agent_id": AGENT_ID,
             "to_number": phone,
             "from_number": RETELL_PHONE_NUMBER,
-            "initial_message": initial_message,
+            "override_agent_id":AGENT_ID_REMINDER
+            ## add description for which reminder
+
         }
 
         # Make API call to RetellAI
@@ -211,18 +210,10 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
             json=call_payload,
         )
 
-        if response.status_code == 200:
-            # Update reminder status in database
-            reminder_collection.update_one(
-                {"_id": reminder_id},
-                {
-                    "$set": {
-                        "status": "called",
-                        "called_at": datetime.datetime.now().isoformat(),
-                    }
-                },
-            )
-            print(f"Made reminder call to {phone} about {description}")
+        # The response is successful if we get a call_id back
+        if 'call_id' in response.json():
+        
+            print(f"Reminder call initiated successfully: {response.json()['call_id']} for {description}")
         else:
             print(f"Error making reminder call: {response.text}")
 
@@ -247,10 +238,10 @@ async def check_restriction(domain: str, make_call: bool = True):
         try:
             # Make call using RetellAI
             call_payload = {
-                "agent_id": AGENT_ID,
                 "to_number": restriction["phone"],
                 "from_number": RETELL_PHONE_NUMBER,
-                "initial_message": f"This is a reminder that {domain} is restricted. Reason: {restriction.get('description', 'Not specified')}",
+                "override_agent_id": AGENT_ID_RESTRICTION
+
             }
 
             response = requests.post(
@@ -259,7 +250,9 @@ async def check_restriction(domain: str, make_call: bool = True):
                 json=call_payload,
             )
 
-            if response.status_code != 200:
+            if 'call_id' in response.json():
+                print(f"Restriction notification call initiated successfully: {response.json()['call_id']}")
+            else:
                 print(f"Error making restriction notification call: {response.text}")
 
         except Exception as e:
@@ -268,44 +261,6 @@ async def check_restriction(domain: str, make_call: bool = True):
     return {"restricted": True, "description": restriction.get("description")}
 
 
-@app.post("/action/process-example")
-async def process_example():
-    """
-    Process example transcript for testing
-    """
-    # Example transcript
-    transcript = """
-Agent: Hi [Name], this is Sam from WakeUp Together. How are you doing today?
-User: Okay. Well,
-Agent: Great! I'm calling to help you create a schedule that supports your long-term goals. To start, could you share some of those goals with me? What are you working toward or hoping to change?
-User: I'd like to record every day. I want to commit some call to get up every single day.
-User: Yeah. That'll be nice.
-Agent: That's a great goal! What kind of daily or weekly structure would help you feel more supported in recording every day and getting up consistently?
-User: No. I said I wanted to connect to GitHub every day.
-Agent: Thanks for the clarification! What kind of daily or weekly structure would help you feel more supported in connecting to GitHub every day and getting up consistently?
-User: No. Permitting code, if they don't.
-Agent: Okay, thanks for clarifying. So, to make sure I understand, you want to commit code to GitHub every day and get up consistently. What kind of daily or weekly structure would help you feel more supported in achieving those goals?
-User: Yeah. I I think, I think I'd like to be given a reminder.
-User: one PM every day to talk to GitHub. Uh, to to commit for to GitHub.
-Agent: Got it! Would you like to set up some regular call times to stay on track with committing to GitHub around 1 PM each day? Would mornings or evenings be better for you for check-in calls?
-User: Yeah. So every every evening, I want to get a one I have I wanna get a one PM calls every day.
-User: Asking me if I've committed any port to GitHub yet. And if I haven't done that yet, then I'd like to then, like, you could give me ideas project ideas that I could work on today.
-User: And get me going.
-Agent: Okay, great! So, we'll have a call every day around 1 PM to check on your GitHub commits and brainstorm project ideas if needed. Want to start this Thursday morning?
-User: I wanna start from day one. Like, I wanna do it every day Like, I wanna do it from the very next one PM.
-Agent: Perfect! So we'll start tomorrow at 1 PM. Just a reminder that this schedule is completely flexible and can be adjusted anytime to fit your life. Do you have any questions or anything else you'd like to add?
-User: Yeah. I think I'd also want a wake up call every day at six AM.
-Agent: Got it. So, in addition to the 1 PM call for GitHub, you'd also like a wake-up call every day at 6 AM. Is that right?
-User: Yeah. Pretty much
-User: And then, actually, finally, on Friday, could you call me at eight PM and, um, check if I've completed my assignments?
-Agent: Okay, so let's make sure I have this right: a 6 AM wake-up call every day, a 1 PM call to check on your GitHub commits, and a call on Fridays at 8 PM to check on your assignments. Is that all correct?
-User: Yes. That sounds good.
-Agent: Great! Just a reminder that this schedule is completely flexible and can be adjusted anytime to fit your life. Do you have any questions or anything else you'd like to add?
-User: No. I think that's it.
-Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap things up. Have a productive day, and I'll talk to you tomorrow!
-    """
-
-    await process_transcript(transcript)
 
 
 if __name__ == "__main__":
