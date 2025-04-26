@@ -110,7 +110,7 @@ async def process_transcript(transcript: str):
     RESPOND ONLY WITH A VALID JSON OBJECT. Do not include any explanations, markdown formatting, or code blocks.
     The JSON must have a "type" field that is either "restriction" or "reminder", plus the other extracted fields.
     
-    HARCODE phone number to +18636676483 for now.
+    HARCODE phone number to +18636676483 for now. and date as 2025-04-26
     Example response for a reminder:
     {{"type": "reminder", "date": "2023-04-15", "time": "07:00", "description": "Wake up call", "phone": "+1234567890"}}
     
@@ -246,42 +246,42 @@ async def make_reminder_call(reminder_id: str, phone: str, description: str):
     except Exception as e:
         print(f"Error in make_reminder_call: {e}")
 
-# @app.get("/action/restriction/{domain}")
-# async def check_restriction(domain: str, make_call: bool = True):
-#     """
-#     Check if a website is restricted for Chrome extension
-#     """
-#     print(f"Checking restriction for {domain}")
-#     restriction = action_collection.find_one({"domain": domain})
+@app.get("/action/restriction/{domain}")
+async def check_restriction(domain: str, make_call: bool = True):
+    """
+    Check if a website is restricted for Chrome extension
+    """
+    print(f"Checking restriction for {domain}")
+    restriction = action_collection.find_one({"domain": domain})
     
-#     if not restriction:
-#         return {"restricted": False}
+    if not restriction:
+        return {"restricted": False}
     
-#     print(f"Restriction found: {restriction}")
+    print(f"Restriction found: {restriction}")
     
-#     # If restriction exists and call should be made
-#     if make_call and restriction.get("phone"):
-#         try:
-#             # Make call using RetellAI
-#             call_payload = {
-#                 "agent_id": AGENT_ID,
-#                 "customer_number": restriction["phone"],
-#                 "initial_message": f"This is a reminder that {domain} is restricted. Reason: {restriction.get('description', 'Not specified')}"
-#             }
+    # If restriction exists and call should be made
+    if make_call and restriction.get("phone"):
+        try:
+            # Make call using RetellAI
+            call_payload = {
+                "agent_id": AGENT_ID,
+                "customer_number": restriction["phone"],
+                "initial_message": f"This is a reminder that {domain} is restricted. Reason: {restriction.get('description', 'Not specified')}"
+            }
             
-#             response = requests.post(
-#                 "https://api.retellai.com/v1/calls",
-#                 headers=app.state.retell_headers,
-#                 json=call_payload
-#             )
+            response = requests.post(
+                "https://api.retellai.com/v1/calls",
+                headers=app.state.retell_headers,
+                json=call_payload
+            )
             
-#             if response.status_code != 200:
-#                 print(f"Error making restriction notification call: {response.text}")
+            if response.status_code != 200:
+                print(f"Error making restriction notification call: {response.text}")
         
-#         except Exception as e:
-#             print(f"Error making restriction notification call: {e}")
+        except Exception as e:
+            print(f"Error making restriction notification call: {e}")
     
-#     return {"restricted": True, "description": restriction.get("description")}
+    return {"restricted": True, "description": restriction.get("description")}
 
 @app.post("/action/restriction")
 async def create_restriction(request: Request):
@@ -305,18 +305,6 @@ async def create_restriction(request: Request):
     
     return {"message": "Restriction created", "id": str(restriction_id)}
 
-# @app.get("/action/reminder/{date}")
-# async def get_reminders(date: str):
-#     """
-#     Get all reminders for a specific date
-#     """
-#     reminders = list(reminder_collection.find({"date": date}))
-    
-#     # Convert ObjectId to string for JSON serialization
-#     for reminder in reminders:
-#         reminder["_id"] = str(reminder["_id"])
-    
-#     return {"reminders": reminders}
 
 @app.post("/action/reminder")
 async def create_reminder(request: Request):
