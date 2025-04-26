@@ -61,7 +61,7 @@ if not api_key:
         "Missing GOOGLE_API_KEY environment variable. Please create a .env file with GOOGLE_API_KEY=YOUR_API_KEY")
 
 # Configure the client using the API key from the environment
-client = genai.Client(http_options={"api_version": "v1beta"}, api_key=api_key)
+client = genai.Client(http_options={"api_version": "v1beta"}, api_key=api_key, )
 
 CONFIG = {"response_modalities": ["AUDIO"]}
 
@@ -171,7 +171,6 @@ class AudioLoop:
             traceback.print_exception(EG)
         finally:
             pya.terminate()
-
 
 if __name__ == "__main__":
     main = AudioLoop()

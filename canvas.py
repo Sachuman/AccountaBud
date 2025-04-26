@@ -1,3 +1,4 @@
+import datetime
 from dotenv import load_dotenv
 import requests
 import os
@@ -109,15 +110,26 @@ def get_my_courses(output_lines):
     params = {"enrollment_state": "active", "per_page": 50}
     courses = make_paginated_request(
         endpoint, params=params, output_lines=output_lines)
+    final_courses = []
     if courses:
         output_lines.append(f"Found {len(courses)} active courses.")
-        # Example: Append names and IDs
         for course in courses:
+            date_string = course.get("created_at")
+            if not date_string:
+                # Skipping course without creation date
+                continue
+            course_created_at = datetime.date.fromisoformat(
+                date_string[:len("YYYY-MM-DD")])
+            if course_created_at < datetime.date(2025, 3, 1):
+                print(
+                    f"Skipping course created before March 1, 2025: {course.get('name')}")
+                continue
             output_lines.append(
                 f"- ID: {course.get('id')}, Name: {course.get('name')}")
+            final_courses.append(course)
     else:
         output_lines.append("Could not retrieve courses.")
-    return courses
+    return final_courses
 
 
 def get_assignments(course_id, course_name, output_lines):
@@ -129,6 +141,23 @@ def get_assignments(course_id, course_name, output_lines):
     assignments = make_paginated_request(
         endpoint, params=params, output_lines=output_lines)
     if assignments:
+        least_due_date = None
+        for assign in assignments:
+            due_date = assign.get("due_at")
+            if (assign["has_submitted_submissions"]):
+                # Skip assignments that have been submitted
+                continue
+            # !!!
+            if due_date:
+                if due_date < datetime.datetime.now().isoformat():
+                    continue
+                due_date_obj = datetime.date.fromisoformat(
+                    due_date[:len("YYYY-MM-DD")])
+                if least_due_date is None or due_date_obj < least_due_date:
+                    least_due_date = due_date_obj
+        if least_due_date:
+            output_lines.append(
+                f"Next assignment due date: {least_due_date.strftime('%Y-%m-%d')}")
         output_lines.append(f"Found {len(assignments)} assignments.")
     else:
         output_lines.append("Could not retrieve assignments.")
