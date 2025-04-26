@@ -15,3 +15,8 @@ source .venv/bin/activate
 ```bash
 uv run fastapi dev
 ```
+
+## Add Dependency
+```bash
+uv add <package_name>
+```
