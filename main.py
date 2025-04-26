@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     
     # Setup Gemini model
     genai.configure(api_key=GEMINI_API_KEY)
-    app.state.gemini_model = genai.GenerativeModel(model_name="gemini-pro")
+    app.state.gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
 
     
@@ -103,14 +103,48 @@ async def process_transcript(transcript: str):
     - description (what to remind about)
     - phone (the user's phone number if mentioned, otherwise set to empty string)
     
-    Return a JSON object with "type" field as either "RESTRICTION" or "reminder", and other extracted fields.
+    RESPOND ONLY WITH A VALID JSON OBJECT. Do not include any explanations, markdown formatting, or code blocks.
+    The JSON must have a "type" field that is either "RESTRICTION" or "reminder", plus the other extracted fields.
+    
+    Example response for a reminder:
+    {{"type": "reminder", "date": "2023-04-15", "time": "07:00", "description": "Wake up call", "phone": "+1234567890"}}
+    
+    Example response for a restriction:
+    {{"type": "RESTRICTION", "domain": "facebook.com", "description": "Avoid social media", "phone": "+1234567890"}}
     
     Transcript: {transcript}
     """
     
     try:
         response = app.state.gemini_model.generate_content(prompt)
-        result = json.loads(response.text)
+        
+        response_text = response.text
+        
+        import re
+        json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response_text, re.DOTALL)
+        
+        if json_match:
+            result = json.loads(json_match.group(1))
+        else:
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError:
+
+                cleaned_text = response_text.strip()
+                start = cleaned_text.find('{')
+                end = cleaned_text.rfind('}') + 1
+                
+                if start >= 0 and end > start:
+                    json_str = cleaned_text[start:end]
+                    result = json.loads(json_str)
+                else:
+                    
+                    print(f"Could not parse JSON from response: {response_text}")
+                    result = {
+                        "type": "unknown",
+                        "description": "Failed to parse response",
+                        "raw_response": response_text[:200] 
+                    }
         
         # Add current date and timestamp
         result["created_at"] = datetime.datetime.now().isoformat()
@@ -137,6 +171,7 @@ async def process_transcript(transcript: str):
         
     except Exception as e:
         print(f"Error processing transcript: {e}")
+        print(f"Response text: {response.text if 'response' in locals() else 'No response'}")
 
 def schedule_reminder(reminder_id: str, date_str: str, time_str: str, phone: str, description: str):
     """
