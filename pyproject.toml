@@ -8,6 +8,7 @@ dependencies = [
     "apscheduler>=3.11.0",
     "fastapi[standard]>=0.115.12",
     "jinja2>=3.1.6",
+    "langchain>=0.3.24",
     "ngrok>=1.4.0",
     "pendulum>=3.1.0",
     "pipecat-ai[google,silero]>=0.0.65",
