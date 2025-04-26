@@ -1,38 +1,18 @@
-"""
-## Setup
-
-To install the dependencies for this script, run:
-
-```bash
-pip install google-genai pyaudio dotenv
-```
-
-Before running this script, ensure the `GOOGLE_API_KEY` environment
+"""Before running this script, ensure the `GOOGLE_API_KEY` environment
 variable is set to the api-key you obtained from Google AI Studio.
 
 Important: **Use headphones**. This script uses the system default audio
 input and output, which often won't include echo cancellation. So to prevent
-the model from interrupting itself it is important that you use headphones. 
-
-## Run
-
-To run the script:
-
-```
-python Get_started_LiveAPI.py
-```
-
+the model from interrupting itself it is important that you use headphones.
 """
 
 import asyncio
-import base64
-import io
 import os
 import sys
 import traceback
-from dotenv import load_dotenv
 
 import pyaudio
+from dotenv import load_dotenv
 
 from google import genai
 
@@ -58,10 +38,14 @@ load_dotenv()
 api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     raise ValueError(
-        "Missing GOOGLE_API_KEY environment variable. Please create a .env file with GOOGLE_API_KEY=YOUR_API_KEY")
+        "Missing GOOGLE_API_KEY environment variable. Please create a .env file with GOOGLE_API_KEY=YOUR_API_KEY"
+    )
 
 # Configure the client using the API key from the environment
-client = genai.Client(http_options={"api_version": "v1beta"}, api_key=api_key, )
+client = genai.Client(
+    http_options={"api_version": "v1beta"},
+    api_key=api_key,
+)
 
 CONFIG = {"response_modalities": ["AUDIO"]}
 
@@ -166,11 +150,12 @@ class AudioLoop:
         except asyncio.CancelledError:
             print("\nExiting...")
         except ExceptionGroup as EG:
-            if hasattr(self, 'audio_stream') and self.audio_stream:
+            if hasattr(self, "audio_stream") and self.audio_stream:
                 self.audio_stream.close()
             traceback.print_exception(EG)
         finally:
             pya.terminate()
+
 
 if __name__ == "__main__":
     main = AudioLoop()
