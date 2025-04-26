@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     
     # Setup Gemini model
     genai.configure(api_key=GEMINI_API_KEY)
-    app.state.gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+    app.state.gemini_model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 
 
     
@@ -92,6 +92,10 @@ async def process_transcript(transcript: str):
     1. Setting a restriction on a website
     2. Setting a reminder for a task
     
+    THERE ARE CAN BE MULTIPLE RESTRICTIONS AND REMINDERS IN THE TRANSCRIPT. PLEASE REVIEW AND RETURN ALL OF THEM.
+    UNDERSTAND what user wants, identify all reminders and it can have multiple times. identify all restrictions and it can have multiple domains.
+    we need json for each restriction and reminder.
+    
     If it's a restriction, extract:
     - domain (the website to restrict)
     - description (reason for restriction)
@@ -104,13 +108,14 @@ async def process_transcript(transcript: str):
     - phone (the user's phone number if mentioned, otherwise set to empty string)
     
     RESPOND ONLY WITH A VALID JSON OBJECT. Do not include any explanations, markdown formatting, or code blocks.
-    The JSON must have a "type" field that is either "RESTRICTION" or "reminder", plus the other extracted fields.
+    The JSON must have a "type" field that is either "restriction" or "reminder", plus the other extracted fields.
     
+    HARCODE phone number to +18636676483 for now.
     Example response for a reminder:
     {{"type": "reminder", "date": "2023-04-15", "time": "07:00", "description": "Wake up call", "phone": "+1234567890"}}
     
     Example response for a restriction:
-    {{"type": "RESTRICTION", "domain": "facebook.com", "description": "Avoid social media", "phone": "+1234567890"}}
+    {{"type": "restriction", "domain": "facebook.com", "description": "Avoid social media", "phone": "+1234567890"}}
     
     Transcript: {transcript}
     """
@@ -121,53 +126,68 @@ async def process_transcript(transcript: str):
         response_text = response.text
         
         import re
-        json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response_text, re.DOTALL)
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text, re.DOTALL)
         
         if json_match:
-            result = json.loads(json_match.group(1))
+            json_str = json_match.group(1).strip()
         else:
-            try:
-                result = json.loads(response_text)
-            except json.JSONDecodeError:
-
-                cleaned_text = response_text.strip()
-                start = cleaned_text.find('{')
-                end = cleaned_text.rfind('}') + 1
-                
-                if start >= 0 and end > start:
-                    json_str = cleaned_text[start:end]
-                    result = json.loads(json_str)
-                else:
-                    
-                    print(f"Could not parse JSON from response: {response_text}")
-                    result = {
-                        "type": "unknown",
-                        "description": "Failed to parse response",
-                        "raw_response": response_text[:200] 
-                    }
+            json_str = response_text.strip()
         
-        # Add current date and timestamp
-        result["created_at"] = datetime.datetime.now().isoformat()
+        json_str = json_str.strip()
         
-        if result["type"] == "RESTRICTION":
-            # Store restriction in database
-            action_collection.insert_one(result)
-            print(f"Stored new restriction: {result}")
-        
-        elif result["type"] == "reminder":
-            # Store reminder in database
-            reminder_id = reminder_collection.insert_one(result).inserted_id
+        start = json_str.find('[') if '[' in json_str else json_str.find('{')
+        if start >= 0:
+            if json_str[start] == '[':
+                end = json_str.rfind(']') + 1
+            else:
+                end = json_str.rfind('}') + 1
             
-            # Schedule reminder if time is specified
-            if result.get("time") and result.get("phone"):
-                schedule_reminder(
-                    str(reminder_id), 
-                    result["date"], 
-                    result["time"], 
-                    result["phone"], 
-                    result["description"]
-                )
-                print(f"Scheduled reminder: {result}")
+            if end > start:
+                json_str = json_str[start:end]
+        
+        # Parse the JSON content
+        try:
+            parsed_data = json.loads(json_str)
+            
+            # Handle both single objects and arrays
+            items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
+            
+            # Process each item
+            for item in items:
+                # Add current date and timestamp
+                item["created_at"] = datetime.datetime.now().isoformat()
+                
+                if item["type"] == "restriction":
+                    # Store restriction in database
+                    action_collection.insert_one(item)
+                    print(f"Stored new restriction: {item}")
+                
+                elif item["type"] == "reminder":
+                    # Store reminder in database
+                    reminder_id = reminder_collection.insert_one(item).inserted_id
+                    
+                    # Schedule reminder if time is specified
+                    if item.get("time") and item.get("phone"):
+                        schedule_reminder(
+                            str(reminder_id), 
+                            item["date"], 
+                            item["time"], 
+                            item["phone"], 
+                            item["description"]
+                        )
+                        print(f"Scheduled reminder: {item}")
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            print(f"Attempted to parse: {json_str}")
+            # Create a fallback result
+            result = {
+                "type": "unknown",
+                "description": "Failed to parse response",
+                "raw_response": response_text[:200]
+            }
+            # Still add this to the database as a record
+            action_collection.insert_one(result)
         
     except Exception as e:
         print(f"Error processing transcript: {e}")
@@ -278,7 +298,7 @@ async def create_restriction(request: Request):
     
     # Add created_at timestamp and type
     data["created_at"] = datetime.datetime.now().isoformat()
-    data["type"] = "RESTRICTION"
+    data["type"] = "restriction"
     
     # Insert into database
     restriction_id = action_collection.insert_one(data).inserted_id
@@ -337,17 +357,34 @@ async def process_example():
     """
     # Example transcript
     transcript = """
-    Agent: Hey [Name], it's Sam from WakeUp Together! I'm calling to help you stay on track with your goal of waking up at 5:30am every day. Would you like me to call you around that time daily to check in?
-    User: Yes. That would work.
-    Agent: Awesome! Should we kick 
-    User: Wait. Actually, no. 
-    Agent: it off tomorrow morning, 
-    User: Hold on. Can you call me at seven AM every day?
-    Agent: No problem! So, you'd like me to call you at 7:00 AM every day instead?
-    User: Yeah. That would be great.
-    Agent: Perfect! Should we start tomorrow morning, then?
-    User: Yeah. Sounds good. Thanks. Bye bye.
-    Agent: Okay, great! Would you like the call to be a quick pep talk, like a
+        Agent: Hi [Name], this is Sam from WakeUp Together. How are you doing today?
+        User: Okay. Well,
+        Agent: Great! I'm calling to help you create a schedule that supports your long-term goals. To start, could you share some of those goals with me? What are you working toward or hoping to change?
+        User: I'd like to record every day. I want to commit some call to get up every single day.
+        User: Yeah. That'll be nice.
+        Agent: That's a great goal! What kind of daily or weekly structure would help you feel more supported in recording every day and getting up consistently?
+        User: No. I said I wanted to connect to GitHub every day.
+        Agent: Thanks for the clarification! What kind of daily or weekly structure would help you feel more supported in connecting to GitHub every day and getting up consistently?
+        User: No. Permitting code, if they don't.
+        Agent: Okay, thanks for clarifying. So, to make sure I understand, you want to commit code to GitHub every day and get up consistently. What kind of daily or weekly structure would help you feel more supported in achieving those goals?
+        User: Yeah. I I think, I think I'd like to be given a reminder.
+        User: one PM every day to talk to GitHub. Uh, to to commit for to GitHub.
+        Agent: Got it! Would you like to set up some regular call times to stay on track with committing to GitHub around 1 PM each day? Would mornings or evenings be better for you for check-in calls?
+        User: Yeah. So every every evening, I want to get a one I have I wanna get a one PM calls every day.
+        User: Asking me if I've committed any port to GitHub yet. And if I haven't done that yet, then I'd like to then, like, you could give me ideas project ideas that I could work on today.
+        User: And get me going.
+        Agent: Okay, great! So, we'll have a call every day around 1 PM to check on your GitHub commits and brainstorm project ideas if needed. Want to start this Thursday morning?
+        User: I wanna start from day one. Like, I wanna do it every day Like, I wanna do it from the very next one PM.
+        Agent: Perfect! So we'll start tomorrow at 1 PM. Just a reminder that this schedule is completely flexible and can be adjusted anytime to fit your life. Do you have any questions or anything else you'd like to add?
+        User: Yeah. I think I'd also want a wake up call every day at six AM.
+        Agent: Got it. So, in addition to the 1 PM call for GitHub, you'd also like a wake-up call every day at 6 AM. Is that right?
+        User: Yeah. Pretty much
+        User: And then, actually, finally, on Friday, could you call me at eight PM and, um, check if I've completed my assignments?
+        Agent: Okay, so let's make sure I have this right: a 6 AM wake-up call every day, a 1 PM call to check on your GitHub commits, and a call on Fridays at 8 PM to check on your assignments. Is that all correct?
+        User: Yes. That sounds good.
+        Agent: Great! Just a reminder that this schedule is completely flexible and can be adjusted anytime to fit your life. Do you have any questions or anything else you'd like to add?
+        User: No. I think that's it.
+        Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap things up. Have a productive day, and I'll talk to you tomorrow!
     """
     
     await process_transcript(transcript)
