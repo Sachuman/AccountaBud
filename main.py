@@ -160,7 +160,7 @@ Transcript: {transcript}
             # Add current date and timestamp
             item["created_at"] = now
 
-            if item["type"] == "RESTRICTION":
+            if item["type"] == "restriction":
                 # Store restriction in database
                 action_collection.insert_one(item)
                 print(f"Stored new restriction: {item}")
@@ -339,8 +339,8 @@ async def webhook(request: Request):
 
     if "voicemail" in transcript.lower() or "voice mail" in transcript.lower():
         description = (
-            "This user's accountability buddy did not respond to their reminder call. "
-            "You might want to check in with them."
+            "checking in with their accountability buddy who did not respond to"
+            "their reminder call."
         )
         call_payload = {
             "to_number": "+19493072284",
@@ -354,9 +354,9 @@ async def webhook(request: Request):
             json=call_payload,
         )
         if response.status_code == 200:
-            print("Voicemail detected, call made to +9493072284")
+            print("Voicemail detected, call made to +19493072284")
         else:
-            print(f"Error making call to +9493072284: {response.text}")
+            print(f"Error making call to +19493072284: {response.text}")
         return {"status": "skipped"}
 
     await process_transcript(transcript, user_phone)
