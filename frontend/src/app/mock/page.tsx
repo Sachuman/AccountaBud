@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { GoalProgress } from "@/components/dashboard/GoalProgress";
 import { JournalInsight } from "@/components/dashboard/JournalInsight";
-import { MoodTracker } from "@/components/dashboard/MoodTracker";
 import { QuickChat } from "@/components/dashboard/QuickChat";
 import { UpcomingReminders } from "@/components/dashboard/UpcomingReminders";
 import { Heart } from "lucide-react";
