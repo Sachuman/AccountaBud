@@ -2,7 +2,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { TreePine, Send, Mic, Volume2, VolumeX } from "lucide-react";
+import { TreePine, Send, Volume2, VolumeX } from "lucide-react";
 import ChatMessage from "@/components/ChatMessage";
 import TranscriptionButton from "@/components/TranscriptionButton";
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,10 @@ export default function Home() {
   const { mode, toggleMode } = useUIMode();
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Create an audio element ref if it doesn't exist
+  console.log("Audio ref:", isTranscribing, isSpeaking);
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
-
-      // Add event listeners
       audioRef.current.onplay = () => setIsSpeaking(true);
       audioRef.current.onended = () => setIsSpeaking(false);
       audioRef.current.onpause = () => setIsSpeaking(false);
@@ -32,9 +29,7 @@ export default function Home() {
         console.error("Audio playback error");
       };
     }
-
     return () => {
-      // Clean up audio element
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
@@ -56,26 +51,18 @@ export default function Home() {
     },
     onFinish: async (message) => {
       console.log("Message finished");
-
-      // Only play text-to-speech if it's enabled and the message is from the assistant
       if (audioEnabled && message.role === "assistant") {
         await playTextToSpeech(message.content);
       }
     },
   });
-
-  // Function to play text-to-speech
   const playTextToSpeech = async (text: string) => {
     if (!text || !audioEnabled) return;
-
     try {
-      // Stop any currently playing audio
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
-
-      // Fetch the audio from our API
       const response = await fetch("/api/text-to-speech", {
         method: "POST",
         headers: {

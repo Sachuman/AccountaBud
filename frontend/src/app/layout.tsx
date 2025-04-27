@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { UIModeProvider } from "@/contexts/UIModeContext";
+import { SmoothCursor } from "@/components/ui/smooth-cursor";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -23,8 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       {/* Apply the font class directly to the body */}
-      <body className={`${spaceGrotesk.className} antialiased`}>
+      <body className={`${spaceGrotesk.className} antialiased bg-background text-foreground`}>
         <UIModeProvider>{children}</UIModeProvider>
+        <SmoothCursor />
       </body>
     </html>
   );
