@@ -80,9 +80,9 @@ async def browser_usage(data: list[BrowserUsage]):
     for usage in data:
         res = await check_restriction(usage.hostname)
         if res["restricted"]:
-            break
+            return {"notified": True, "hostname": usage.hostname}
 
-    return {"message": "Browser usage processed"}
+    return {"notified": False}
 
 
 class TranscriptRequest(BaseModel):
