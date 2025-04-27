@@ -57,7 +57,7 @@ async function sendUsageReport() {
     console.log('Sending usage alert...', records);
 
     try {
-        const res = await fetch('http://localhost:8000/browser-usage', {
+        const res = await fetch('https://accountabud.ngrok.app/browser-usage', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(records)

@@ -31,24 +31,25 @@ export default function HistoryPage() {
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
+  console.log(activeTab);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Fetch reminders
         const remindersResponse = await fetch("/api/reminders");
         const remindersData = await remindersResponse.json();
-        
+
         // Fetch restrictions
         const restrictionsResponse = await fetch("/api/restrictions");
         const restrictionsData = await restrictionsResponse.json();
-        
+
         if (remindersData.status === "success") {
           setReminders(remindersData.data);
         }
-        
+
         if (restrictionsData.status === "success") {
           setRestrictions(restrictionsData.data);
         }
@@ -58,7 +59,7 @@ export default function HistoryPage() {
         setIsLoading(false);
       }
     };
-    
+
     fetchData();
   }, []);
 
@@ -71,7 +72,7 @@ export default function HistoryPage() {
         day: "numeric",
         year: "numeric",
       });
-    } catch (e) {
+    } catch {
       return dateString;
     }
   };
@@ -84,13 +85,13 @@ export default function HistoryPage() {
       const date = new Date();
       date.setHours(parseInt(hours, 10));
       date.setMinutes(parseInt(minutes, 10));
-      
+
       return date.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
       });
-    } catch (e) {
+    } catch {
       return timeString;
     }
   };
@@ -100,13 +101,13 @@ export default function HistoryPage() {
     try {
       const date = new Date(dateString);
       return formatDistanceToNow(date, { addSuffix: true });
-    } catch (e) {
+    } catch {
       return "Unknown time";
     }
   };
 
   // All items sorted by created_at
-  const allItems = [...reminders, ...restrictions].sort((a, b) => 
+  const allItems = [...reminders, ...restrictions].sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
@@ -115,7 +116,7 @@ export default function HistoryPage() {
       <h1 className="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-transparent bg-clip-text">
         Agentic Workflow History
       </h1>
-      
+
       <div className="flex justify-center mb-8">
         <Tabs defaultValue="all" className="w-full max-w-4xl" onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3">
@@ -123,7 +124,7 @@ export default function HistoryPage() {
             <TabsTrigger value="reminders">Reminders</TabsTrigger>
             <TabsTrigger value="restrictions">Restrictions</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="all" className="mt-6">
             <div className="relative">
               <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-purple-500 via-indigo-400 to-blue-400"></div>
@@ -210,7 +211,7 @@ export default function HistoryPage() {
               </ScrollArea>
             </div>
           </TabsContent>
-          
+
           <TabsContent value="reminders" className="mt-6">
             <ScrollArea className="h-[70vh] pr-4">
               {isLoading ? (
@@ -256,7 +257,7 @@ export default function HistoryPage() {
               )}
             </ScrollArea>
           </TabsContent>
-          
+
           <TabsContent value="restrictions" className="mt-6">
             <ScrollArea className="h-[70vh] pr-4">
               {isLoading ? (
