@@ -312,17 +312,26 @@ async def webhook(request: Request):
     # Log the raw request
     data = await request.json()
 
-    if data["event"] != "call_analyzed":
-        return {"status": "waiting"}
-
-    call_id = data.get("call_id")
-
-    print(f"Call analyzed notification received for call ID: {call_id}")
-
-    transcript = data["call"]["transcript"]
-    print(f"Transcript: {transcript}")
-
-    await process_transcript(transcript)
+    if data["event"] == "call_ended":
+        call_id = data.get("call_id")
+        
+        # Check for disconnection reason
+        disconnection_reason = data.get("disconnection_reason")
+        if disconnection_reason in ["dial_busy", "dial_failed", "dial_no_answer"]:
+            print(f"CALL DECLINED: Call {call_id} was declined or not answered. Reason: {disconnection_reason}")
+            # You might want to handle declined calls differently here
+            # For example, reschedule the call or mark it as declined in your database
+        
+        print(f"Call ended notification received for call ID: {call_id}")
+        
+        # Continue with normal processing...
+        
+    elif data["event"] == "call_analyzed":
+        call_id = data.get("call_id")
+        print(f"Call analyzed notification received for call ID: {call_id}")
+        transcript = data["call"]["transcript"]
+        print(f"Transcript: {transcript}")
+        await process_transcript(transcript)
 
     return {"status": "success"}
 
