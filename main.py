@@ -23,6 +23,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RETELL_PHONE_NUMBER = os.getenv("RETELL_PHONE_NUMBER")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 AGENT_NAME = os.getenv("AGENT_NAME", "")  # Default to empty string if not set
+FROM_NUMBER = os.getenv("FROM_NUMBER")
 
 # MongoDB setup
 client = MongoClient(MONGO_URL)
@@ -328,13 +329,16 @@ Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap 
 async def webhook(request: Request):
     data = await request.json()
 
+    if "from_number" in data["call"]:
+        print(f"Call completed for {data['call']['from_number']}")
+
     if data["event"] != "call_analyzed":
         return {"status": "skipped"}
 
     call_id = data.get("call_id")
     print(f"Call analyzed notification received for call ID: {call_id}")
     transcript = data["call"]["transcript"]
-    user_phone = data["call"]["from_number"]
+    # user_phone = data["call"]["from_number"]
     print(f"Transcript: {transcript}")
 
     if "voicemail" in transcript.lower() or "voice mail" in transcript.lower():
@@ -343,7 +347,7 @@ async def webhook(request: Request):
             "their reminder call."
         )
         call_payload = {
-            "to_number": "+19493072284",
+            "to_number": FROM_NUMBER,
             "from_number": RETELL_PHONE_NUMBER,
             "override_agent_id": AGENT_ID_REMINDER,
             "retell_llm_dynamic_variables": {"reminder_description": description},
@@ -354,12 +358,12 @@ async def webhook(request: Request):
             json=call_payload,
         )
         if response.status_code == 200:
-            print("Voicemail detected, call made to +19493072284")
+            print(f"Voicemail detected, call made to {FROM_NUMBER}")
         else:
-            print(f"Error making call to +19493072284: {response.text}")
+            print(f"Error making call to {FROM_NUMBER}: {response.text}")
         return {"status": "skipped"}
 
-    await process_transcript(transcript, user_phone)
+    await process_transcript(transcript, FROM_NUMBER)
 
 
 if __name__ == "__main__":
