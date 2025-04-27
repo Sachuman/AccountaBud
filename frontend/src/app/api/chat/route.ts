@@ -1,4 +1,5 @@
 "use server";
+// @ts-expect-error: no types for ai-sdk yet
 import { streamText, UIMessage } from "ai";
 import { google } from "@ai-sdk/google";
 
