@@ -283,6 +283,32 @@ async def check_restriction(hostname: str, make_call: bool = True):
     return {"restricted": True, "description": restriction.get("description")}
 
 
+@app.get("/api/restrictions")
+async def get_restrictions():
+    """
+    Get all website restrictions
+    """
+    try:
+        restrictions = list(action_collection.find({}, {"_id": 0}))
+        return {"status": "success", "data": restrictions}
+    except Exception as e:
+        print(f"Error fetching restrictions: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/reminders")
+async def get_reminders():
+    """
+    Get all reminders
+    """
+    try:
+        reminders = list(reminder_collection.find({}, {"_id": 0}))
+        return {"status": "success", "data": reminders}
+    except Exception as e:
+        print(f"Error fetching reminders: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @app.post("/action/process-example")
 async def process_example():
     """
