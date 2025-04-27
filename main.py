@@ -4,13 +4,16 @@ from contextlib import asynccontextmanager
 
 import ngrok
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import google.generativeai as genai
 from langchain_core.output_parsers import JsonOutputParser
+import logging
+
 
 
 load_dotenv()
@@ -22,12 +25,16 @@ AGENT_ID_REMINDER = os.getenv("RETELL_AGENT_ID_REMINDER")
 MONGO_URL = os.getenv("MONGO_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RETELL_PHONE_NUMBER = os.getenv("RETELL_PHONE_NUMBER")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+AGENT_NAME = os.getenv("AGENT_NAME", "")  # Default to empty string if not set
 
 # MongoDB setup
 client = MongoClient(MONGO_URL)
 db = client.get_database("La-Hacks")
 action_collection = db.get_collection("action_restrictions")
 reminder_collection = db.get_collection("action_reminders")
+
+logger = logging.getLogger("retell_webhook")
 
 # Initialize scheduler for reminders
 scheduler = AsyncIOScheduler()
@@ -137,11 +144,8 @@ Transcript: {transcript}
 
     try:
         response = app.state.gemini_model.generate_content(prompt)
-
         response_text = response.text
-
         parser = JsonOutputParser()
-
         result = parser.parse(response_text)
 
         # Add current date and timestamp
@@ -168,10 +172,8 @@ Transcript: {transcript}
                 print(f"Scheduled reminder: {result}")
 
     except Exception as e:
-        print(f"Error processing transcript: {e}")
-        print(
-            f"Response text: {response.text if 'response' in locals() else 'No response'}"
-        )
+        print(f"Error prompting Gemini: {e}")
+        result = []
 
     return str(result)
 
@@ -311,6 +313,33 @@ Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap 
     """
 
     await process_transcript(transcript)
+
+
+
+# Webhook route to receive call completion notifications
+@app.post("/webhook")
+async def webhook(request: Request):
+    # Log the raw request
+    print(f"Received webhook request:")
+    print(f"Headers: {dict(request.headers)}")
+    
+    data = await request.json()
+
+    if data["event"] != "call_analyzed":
+        return {"status": "waiting"}
+    
+    call_id = data.get('call_id')
+
+    print(f"Call analyzed notification received for call ID: {call_id}")
+
+   
+    transcript = data["call"]["transcript"]
+    print(f"Transcript: {transcript}")
+
+    await process_transcript(transcript)
+    
+    return {"status": "success"}
+
 
 
 if __name__ == "__main__":
