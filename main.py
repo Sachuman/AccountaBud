@@ -2,7 +2,6 @@ import os
 import datetime
 from contextlib import asynccontextmanager
 
-import ngrok
 import requests
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
@@ -11,7 +10,6 @@ from pymongo import MongoClient
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import google.generativeai as genai
 from langchain_core.output_parsers import JsonOutputParser
-import logging
 
 
 load_dotenv()
@@ -32,7 +30,6 @@ db = client.get_database("La-Hacks")
 action_collection = db.get_collection("action_restrictions")
 reminder_collection = db.get_collection("action_reminders")
 
-logger = logging.getLogger("retell_webhook")
 
 # Initialize scheduler for reminders
 scheduler = AsyncIOScheduler()
@@ -40,10 +37,6 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup ngrok
-    listener = await ngrok.forward(8000, authtoken_from_env=True)
-    app.state.ngrok_url = listener.url()
-
     # Setup RetellAI client
     app.state.retell_headers = {
         "Content-Type": "application/json",
@@ -61,7 +54,6 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     scheduler.shutdown()
-    listener.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -69,7 +61,6 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    print("Ngrok URL:", app.state.ngrok_url)
     return {"message": "Hello, World!"}
 
 
