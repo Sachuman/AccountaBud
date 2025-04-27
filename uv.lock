@@ -8,6 +8,23 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "agentverse-client"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "aiohttp-retry" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/18/61/3069a39638da6c2e1f67804c02a594c0add3b71013f09a8168c3d2a4e3e5/agentverse_client-0.1.4.tar.gz", hash = "sha256:adc5c776194fea3ed362272f8a702445e5b5238ace0e99659c4ff617ddef1001", size = 178689 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/ec/ded37f044ea37cdcc2d0d97506e778b2bc9b2c38a2e44ac4407336f23974/agentverse_client-0.1.4-py3-none-any.whl", hash = "sha256:11bdb194257cc846e47665863dc4ed5c8b5c88aa80bf91d20f544ebc254faf31", size = 534077 },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -190,6 +207,15 @@ wheels = [
 ]
 
 [[package]]
+name = "bech32"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/fe/b67ac9b123e25a3c1b8fc3f3c92648804516ab44215adb165284e024c43f/bech32-1.2.0.tar.gz", hash = "sha256:7d6db8214603bd7871fcfa6c0826ef68b85b0abd90fa21c285a9c5e21d2bd899", size = 3695 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/41/7022a226e5a6ac7091a95ba36bad057012ab7330b9894ad4e14e31d0b858/bech32-1.2.0-py3-none-any.whl", hash = "sha256:990dc8e5a5e4feabbdf55207b5315fdd9b73db40be294a19b3752cde9e79d981", size = 4587 },
+]
+
+[[package]]
 name = "cachetools"
 version = "5.5.2"
 source = { registry = "https://pypi.org/simple" }
@@ -352,6 +378,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ecdsa"
+version = "0.19.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/1f/924e3caae75f471eae4b26bd13b698f6af2c44279f67af317439c2f4c46a/ecdsa-0.19.1.tar.gz", hash = "sha256:478cba7b62555866fcb3bb3fe985e06decbdb68ef55713c4e5ab98c57d508e61", size = 201793 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/a3/460c57f094a4a165c84a1341c373b0a4f5ec6ac244b998d5021aade89b77/ecdsa-0.19.1-py2.py3-none-any.whl", hash = "sha256:30638e27cf77b7e15c4c4cc1973720149e1033827cfd00661ca5c8cc0cdb24c3", size = 150607 },
+]
+
+[[package]]
 name = "email-validator"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -405,6 +443,22 @@ wheels = [
 [package.optional-dependencies]
 standard = [
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[[package]]
+name = "fetchai"
+version = "0.1.41"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "agentverse-client" },
+    { name = "click" },
+    { name = "mnemonic" },
+    { name = "python-dotenv" },
+    { name = "uagents-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9d/5f/4a20def14e1cb9ce8628c7a189945c64686e666c75b45d83ea5e46deaeff/fetchai-0.1.41.tar.gz", hash = "sha256:2c5b804ac278dd789b982b74846edc0c6d4e77b0848893fdb57fbd417d432c79", size = 22603 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/f5/c3c5de114034461030d42ba434226c919e4b8417eaa75166ee961d15a021/fetchai-0.1.41-py3-none-any.whl", hash = "sha256:d25b50f5cf07c41166e654d0080f1797a611adc40c44fb55bae9b85b9cec967c", size = 23069 },
 ]
 
 [[package]]
@@ -941,6 +995,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "apscheduler" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "fetchai" },
     { name = "jinja2" },
     { name = "langchain" },
     { name = "logging" },
@@ -959,6 +1014,7 @@ dependencies = [
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.11.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
+    { name = "fetchai", specifier = ">=0.1.41" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "langchain", specifier = ">=0.3.24" },
     { name = "logging", specifier = ">=0.4.9.6" },
@@ -1157,6 +1213,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload_time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload_time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "mnemonic"
+version = "0.21"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/77/e6232ed59fbd7b90208bb8d4f89ed5aabcf30a524bc2fb8f0dafbe8e7df9/mnemonic-0.21.tar.gz", hash = "sha256:1fe496356820984f45559b1540c80ff10de448368929b9c60a2b55744cc88acf", size = 152462 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/48/5abb16ce7f9d97b728e6b97c704ceaa614362e0847651f379ed0511942a0/mnemonic-0.21-py3-none-any.whl", hash = "sha256:72dc9de16ec5ef47287237b9b6943da11647a03fe7cf1f139fc3d7c4a7439288", size = 92701 },
 ]
 
 [[package]]
@@ -2234,6 +2299,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8b/2e/c14812d3d4d9cd1773c6be938f89e5735a1f11a9f184ac3639b93cef35d5/tzlocal-5.3.1.tar.gz", hash = "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd", size = 30761, upload_time = "2025-03-05T21:17:41.549Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/14/e2a54fabd4f08cd7af1c07030603c3356b74da07f7cc056e600436edfa17/tzlocal-5.3.1-py3-none-any.whl", hash = "sha256:eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d", size = 18026, upload_time = "2025-03-05T21:17:39.857Z" },
+]
+
+[[package]]
+name = "uagents-core"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bech32" },
+    { name = "ecdsa" },
+    { name = "pydantic" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/0c/f33ee5de25d5c8b83f9c0988bb6ce025c894826bca2ddbeb66b04d3e1bfa/uagents_core-0.2.3.tar.gz", hash = "sha256:3b2c075691ac728b1fb3d2b1614bcf86b580e4f192d90cacc2906db3b87df9ff", size = 12493 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/b5/545134a071ba8b975f050c0217d01cbee7f8f197e65f41548bcce6495974/uagents_core-0.2.3-py3-none-any.whl", hash = "sha256:66334a39643de168d31eb9186d642438830bc7ce26342eb6d5d7bd65ec3888f6", size = 18195 },
 ]
 
 [[package]]
