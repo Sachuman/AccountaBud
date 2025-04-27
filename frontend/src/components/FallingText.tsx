@@ -62,7 +62,7 @@ const FallingText: React.FC<FallingTextProps> = ({
             observer.disconnect();
           }
         },
-        { threshold: 0.1 },
+        { threshold: 0.1 }
       );
       observer.observe(containerRef.current);
       return () => observer.disconnect();
@@ -106,28 +106,28 @@ const FallingText: React.FC<FallingTextProps> = ({
       height + 25,
       width,
       50,
-      boundaryOptions,
+      boundaryOptions
     );
     const leftWall = Bodies.rectangle(
       -25,
       height / 2,
       50,
       height,
-      boundaryOptions,
+      boundaryOptions
     );
     const rightWall = Bodies.rectangle(
       width + 25,
       height / 2,
       50,
       height,
-      boundaryOptions,
+      boundaryOptions
     );
     const ceiling = Bodies.rectangle(
       width / 2,
       -25,
       width,
       50,
-      boundaryOptions,
+      boundaryOptions
     );
 
     if (!textRef.current) return;
@@ -225,7 +225,7 @@ const FallingText: React.FC<FallingTextProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative z-[1] w-full h-full cursor-pointer text-center pt-8 overflow-hidden"
+      className="relative pt-32 z-[1] w-full h-full cursor-pointer text-center overflow-hidden"
       onClick={trigger === "click" ? handleTrigger : undefined}
       onMouseOver={trigger === "hover" ? handleTrigger : undefined}
     >
