@@ -6,11 +6,15 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.2.13",
     "@ai-sdk/groq": "^1.2.8",
+    "@opennextjs/cloudflare": "^1.0.0-beta.3",
     "@radix-ui/react-icons": "^1.3.2",
     "@radix-ui/react-slot": "^1.2.0",
     "ai": "^4.3.10",
@@ -26,7 +30,8 @@
     "ogl": "^1.0.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.2.0"
+    "tailwind-merge": "^3.2.0",
+    "wrangler": "^4.13.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
