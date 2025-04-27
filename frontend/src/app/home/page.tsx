@@ -45,9 +45,14 @@ function Home() {
         >
           Jump Right In!
         </ScrollFloat>
-        <Link className="p-4 md:p-8 mt-2 md:mt-4 outline hover:bg-secondary/90" href="/">
-          Get Started
-        </Link>
+        <div className="flex gap-4">
+          <Link className="p-4 md:p-8 mt-2 md:mt-4 outline hover:bg-secondary/90" href="/">
+            Get Started
+          </Link>
+          <Link className="p-4 md:p-8 mt-2 md:mt-4 outline hover:bg-secondary/90" href="/history">
+            View History
+          </Link>
+        </div>
       </div>
     </div>
   );
