@@ -32,36 +32,47 @@ async function recordActiveTime() {
     });
     if (!tab?.url) return;
 
-    let domain;
+    let hostname;
     try {
-        domain = new URL(tab.url).hostname;
+        hostname = new URL(tab.url).hostname;
     } catch {
         return; // skip invalid URLs
     }
 
     const times = await getTimes();
-    times[domain] = (times[domain] || 0) + (RECORD_INTERVAL_MIN * 60);
+    times[hostname] = (times[hostname] || 0) + (RECORD_INTERVAL_MIN * 60);
     await chrome.storage.local.set({ [TIMES_KEY]: times });
 }
 
 async function sendUsageReport() {
-    const times = await getTimes();
-    if (times.length === 0) return;
-
+    let times = await getTimes();
     const date = new Date().toLocaleDateString();
     const email = (await chrome.identity.getProfileUserInfo()).email;
     const records = Object.entries(times).map(
-        ([domain, active_sec]) => ({ date, email, domain, active_sec })
+        ([hostname, active_sec]) => ({ date, email, hostname, active_sec })
     );
+
+    if (records.length === 0) return;
 
     console.log('Sending usage alert...', records);
 
-    await fetch('https://your.backend.example.com/usage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(records)
-    });
-
+    try {
+        const res = await fetch('http://localhost:8000/browser-usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(records)
+        });
+        data = res.json();
+        if (data["notified"]) {
+            let hostname = data["hostname"];
+            times = times.filter((t, h) => h !== hostname);
+            await chrome.storage.local.set({ [TIMES_KEY]: times });
+        }
+        console.log('Usage report sent successfully');
+    }
+    catch (error) {
+        console.error('Error sending usage report:', error);
+    }
 }
 
 async function getTimes() {
