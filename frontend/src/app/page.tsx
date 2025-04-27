@@ -138,6 +138,24 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen backdrop-blur-3xl">
+      <div className="absolute inset-x-3 top-0 z-10 box-content overflow-hidden border-b backdrop-blur-md transition-[transform,border] ease-snappy blur-fallback:bg-gradient-noise-top max-sm:hidden sm:h-3.5">
+        <div className="absolute left-0 top-0 h-full w-8 bg-gradient-to-r from-gradient-noise-top to-transparent blur-fallback:hidden"></div>
+        <div className="absolute right-20 top-0 h-full w-8 bg-gradient-to-l from-gradient-noise-top to-transparent blur-fallback:hidden"></div>
+        <div className="absolute right-0 top-0 h-full w-24 bg-gradient-noise-top blur-fallback:hidden"></div>
+      </div>
+      <div
+        className="fixed right-0 top-0 z-20 h-16 w-28 max-sm:hidden"
+        style={{ clipPath: "inset(0px 12px 0px 0px)" }}
+      >
+        <div
+          className="group pointer-events-none absolute top-3.5 z-10 -mb-8 h-32 w-full origin-top transition-all"
+          style={{
+            boxShadow: "10px -10px 8px 2px hsl(var(--gradient-noise-top))",
+          }}
+        >
+
+        </div>
+      </div>
       <header className="curved-header flex items-center gap-3 p-6 backdrop-blur shrink-0">
         <div className="shine-effect p-2 rounded-lg bg-background/20">
           <TreePine className="h-6 w-6 p-1 bg-emerald-950" />

@@ -7,4 +7,3 @@ venv/
 .env.production.local
 .env.development
 .env.test
-frontend/
