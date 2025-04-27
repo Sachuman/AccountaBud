@@ -2,7 +2,6 @@ import os
 import datetime
 from contextlib import asynccontextmanager
 
-import ngrok
 import requests
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
@@ -11,7 +10,6 @@ from pymongo import MongoClient
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import google.generativeai as genai
 from langchain_core.output_parsers import JsonOutputParser
-import logging
 
 
 load_dotenv()
@@ -25,6 +23,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RETELL_PHONE_NUMBER = os.getenv("RETELL_PHONE_NUMBER")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 AGENT_NAME = os.getenv("AGENT_NAME", "")  # Default to empty string if not set
+FROM_NUMBER = os.getenv("FROM_NUMBER")
 
 # MongoDB setup
 client = MongoClient(MONGO_URL)
@@ -32,7 +31,6 @@ db = client.get_database("La-Hacks")
 action_collection = db.get_collection("action_restrictions")
 reminder_collection = db.get_collection("action_reminders")
 
-logger = logging.getLogger("retell_webhook")
 
 # Initialize scheduler for reminders
 scheduler = AsyncIOScheduler()
@@ -40,10 +38,6 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup ngrok
-    listener = await ngrok.forward(8000, authtoken_from_env=True)
-    app.state.ngrok_url = listener.url()
-
     # Setup RetellAI client
     app.state.retell_headers = {
         "Content-Type": "application/json",
@@ -61,7 +55,6 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     scheduler.shutdown()
-    listener.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -69,8 +62,32 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    print("Ngrok URL:", app.state.ngrok_url)
     return {"message": "Hello, World!"}
+
+
+@app.post("/call")
+async def make_call(request: Request):
+    to_number = (await request.json()).get("to_number")
+
+    if not to_number:
+        return {"status": "error", "message": "No phone number provided"}
+
+    print(f"Making call to {to_number}")
+
+    call_payload = {
+        "to_number": to_number,
+        "from_number": RETELL_PHONE_NUMBER,
+    }
+
+    response = requests.post(
+        "https://api.retellai.com/v2/create-phone-call",
+        headers=app.state.retell_headers,
+        json=call_payload,
+    )
+
+    if response.status_code == 200:
+        call_id = response.json().get("call_id")
+        return {"status": "success", "call_id": call_id}
 
 
 class BrowserUsage(BaseModel):
@@ -94,15 +111,7 @@ class TranscriptRequest(BaseModel):
     transcript: str
 
 
-@app.post("/process-transcript")
-async def process_transcript_endpoint(data: TranscriptRequest):
-    """
-    Process transcript using Gemini and store in database
-    """
-    await process_transcript(data.transcript)
-
-
-async def process_transcript(transcript: str):
+async def process_transcript(transcript: str, user_phone: str = None):
     """
     Process transcript using Gemini to determine intent and structure
     """
@@ -119,18 +128,18 @@ we need json for each restriction and reminder. If there is a daily event, creat
 If it's a restriction, extract:
 - hostname (the website to restrict)
 - description (reason for restriction)
-- phone (the user's phone number if mentioned, otherwise set to empty string)
+- phone number
 
 If it's a reminder, extract:
 - date (in YYYY-MM-DD format, use today's date if not specified)
 - time (in HH:MM format)
 - description (what to remind about)
-- phone (the user's phone number if mentioned, otherwise set to empty string)
+- phone number
 
 RESPOND ONLY WITH A VALID JSON OBJECT. Do not include any explanations, markdown formatting, or code blocks.
 The JSON must have a "type" field that is either "restriction" or "reminder", plus the other extracted fields.
 
-HARCODE phone number to +18636676483 for now. Today's date is {now}.
+The user's phone number is {user_phone}. Today's date is {now}.
 Example response for a reminder:
 {{"type": "reminder", "date": "2023-04-15", "time": "07:00", "description": "Wake up call", "phone": "+1234567890"}}
 
@@ -146,28 +155,30 @@ Transcript: {transcript}
         parser = JsonOutputParser()
         result = parser.parse(response_text)
 
-        # Add current date and timestamp
-        result["created_at"] = now
+        assert isinstance(result, list), "Response should be a list of JSON objects"
 
-        if result["type"] == "RESTRICTION":
-            # Store restriction in database
-            action_collection.insert_one(result)
-            print(f"Stored new restriction: {result}")
+        for item in result:
+            # Add current date and timestamp
+            item["created_at"] = now
 
-        elif result["type"] == "reminder":
-            # Store reminder in database
-            reminder_id = reminder_collection.insert_one(result).inserted_id
+            if item["type"] == "restriction":
+                # Store restriction in database
+                action_collection.insert_one(item)
+                print(f"Stored new restriction: {item}")
 
-            # Schedule reminder if time is specified
-            if result.get("time") and result.get("phone"):
-                schedule_reminder(
-                    str(reminder_id),
-                    result["date"],
-                    result["time"],
-                    result["phone"],
-                    result["description"],
-                )
-                print(f"Scheduled reminder: {result}")
+            elif item["type"] == "reminder":
+                # Store reminder in database
+                reminder_collection.insert_one(item).inserted_id
+
+                # Schedule reminder if time is specified
+                if item.get("time") and item.get("phone"):
+                    schedule_reminder(
+                        item["date"],
+                        item["time"],
+                        item["phone"],
+                        item["description"],
+                    )
+                    print(f"Scheduled reminder: {item}")
 
     except Exception as e:
         print(f"Error prompting Gemini: {e}")
@@ -316,22 +327,43 @@ Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap 
 # Webhook route to receive call completion notifications
 @app.post("/webhook")
 async def webhook(request: Request):
-    # Log the raw request
     data = await request.json()
 
+    if "from_number" in data["call"]:
+        print(f"Call completed for {data['call']['from_number']}")
+
     if data["event"] != "call_analyzed":
-        return {"status": "waiting"}
+        return {"status": "skipped"}
 
     call_id = data.get("call_id")
-
     print(f"Call analyzed notification received for call ID: {call_id}")
-
     transcript = data["call"]["transcript"]
+    # user_phone = data["call"]["from_number"]
     print(f"Transcript: {transcript}")
 
-    await process_transcript(transcript)
+    if "voicemail" in transcript.lower() or "voice mail" in transcript.lower():
+        description = (
+            "checking in with their accountability buddy who did not respond to"
+            "their reminder call."
+        )
+        call_payload = {
+            "to_number": FROM_NUMBER,
+            "from_number": RETELL_PHONE_NUMBER,
+            "override_agent_id": AGENT_ID_REMINDER,
+            "retell_llm_dynamic_variables": {"reminder_description": description},
+        }
+        response = requests.post(
+            "https://api.retellai.com/v2/create-phone-call",
+            headers=app.state.retell_headers,
+            json=call_payload,
+        )
+        if response.status_code == 200:
+            print(f"Voicemail detected, call made to {FROM_NUMBER}")
+        else:
+            print(f"Error making call to {FROM_NUMBER}: {response.text}")
+        return {"status": "skipped"}
 
-    return {"status": "success"}
+    await process_transcript(transcript, FROM_NUMBER)
 
 
 if __name__ == "__main__":
