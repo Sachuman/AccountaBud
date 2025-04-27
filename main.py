@@ -4,8 +4,7 @@ from contextlib import asynccontextmanager
 
 import ngrok
 import requests
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -13,7 +12,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import google.generativeai as genai
 from langchain_core.output_parsers import JsonOutputParser
 import logging
-
 
 
 load_dotenv()
@@ -315,31 +313,25 @@ Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap 
     await process_transcript(transcript)
 
 
-
 # Webhook route to receive call completion notifications
 @app.post("/webhook")
 async def webhook(request: Request):
     # Log the raw request
-    print(f"Received webhook request:")
-    print(f"Headers: {dict(request.headers)}")
-    
     data = await request.json()
 
     if data["event"] != "call_analyzed":
         return {"status": "waiting"}
-    
-    call_id = data.get('call_id')
+
+    call_id = data.get("call_id")
 
     print(f"Call analyzed notification received for call ID: {call_id}")
 
-   
     transcript = data["call"]["transcript"]
     print(f"Transcript: {transcript}")
 
     await process_transcript(transcript)
-    
-    return {"status": "success"}
 
+    return {"status": "success"}
 
 
 if __name__ == "__main__":
