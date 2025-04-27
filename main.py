@@ -85,15 +85,7 @@ class TranscriptRequest(BaseModel):
     transcript: str
 
 
-@app.post("/process-transcript")
-async def process_transcript_endpoint(data: TranscriptRequest):
-    """
-    Process transcript using Gemini and store in database
-    """
-    await process_transcript(data.transcript)
-
-
-async def process_transcript(transcript: str):
+async def process_transcript(transcript: str, user_phone: str = None):
     """
     Process transcript using Gemini to determine intent and structure
     """
@@ -110,18 +102,18 @@ we need json for each restriction and reminder. If there is a daily event, creat
 If it's a restriction, extract:
 - hostname (the website to restrict)
 - description (reason for restriction)
-- phone (the user's phone number if mentioned, otherwise set to empty string)
+- phone number
 
 If it's a reminder, extract:
 - date (in YYYY-MM-DD format, use today's date if not specified)
 - time (in HH:MM format)
 - description (what to remind about)
-- phone (the user's phone number if mentioned, otherwise set to empty string)
+- phone number
 
 RESPOND ONLY WITH A VALID JSON OBJECT. Do not include any explanations, markdown formatting, or code blocks.
 The JSON must have a "type" field that is either "restriction" or "reminder", plus the other extracted fields.
 
-HARCODE phone number to +18636676483 for now. Today's date is {now}.
+The user's phone number is {user_phone}. Today's date is {now}.
 Example response for a reminder:
 {{"type": "reminder", "date": "2023-04-15", "time": "07:00", "description": "Wake up call", "phone": "+1234567890"}}
 
@@ -320,9 +312,10 @@ async def webhook(request: Request):
     print(f"Call analyzed notification received for call ID: {call_id}")
 
     transcript = data["call"]["transcript"]
+    user_phone = data["call"]["from_number"]
     print(f"Transcript: {transcript}")
 
-    await process_transcript(transcript)
+    await process_transcript(transcript, user_phone)
 
     return {"status": "success"}
 
