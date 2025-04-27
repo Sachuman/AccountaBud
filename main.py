@@ -137,28 +137,30 @@ Transcript: {transcript}
         parser = JsonOutputParser()
         result = parser.parse(response_text)
 
-        # Add current date and timestamp
-        result["created_at"] = now
+        assert isinstance(result, list), "Response should be a list of JSON objects"
 
-        if result["type"] == "RESTRICTION":
-            # Store restriction in database
-            action_collection.insert_one(result)
-            print(f"Stored new restriction: {result}")
+        for item in result:
+            # Add current date and timestamp
+            item["created_at"] = now
 
-        elif result["type"] == "reminder":
-            # Store reminder in database
-            reminder_id = reminder_collection.insert_one(result).inserted_id
+            if item["type"] == "RESTRICTION":
+                # Store restriction in database
+                action_collection.insert_one(item)
+                print(f"Stored new restriction: {item}")
 
-            # Schedule reminder if time is specified
-            if result.get("time") and result.get("phone"):
-                schedule_reminder(
-                    str(reminder_id),
-                    result["date"],
-                    result["time"],
-                    result["phone"],
-                    result["description"],
-                )
-                print(f"Scheduled reminder: {result}")
+            elif item["type"] == "reminder":
+                # Store reminder in database
+                reminder_collection.insert_one(item).inserted_id
+
+                # Schedule reminder if time is specified
+                if item.get("time") and item.get("phone"):
+                    schedule_reminder(
+                        item["date"],
+                        item["time"],
+                        item["phone"],
+                        item["description"],
+                    )
+                    print(f"Scheduled reminder: {item}")
 
     except Exception as e:
         print(f"Error prompting Gemini: {e}")
