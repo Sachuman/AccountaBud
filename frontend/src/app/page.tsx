@@ -161,7 +161,7 @@ export default function Home() {
           <TreePine className="h-6 w-6 p-1 bg-emerald-950" />
         </div>
         <h1 className="text-2xl text-white font-semibold tracking-tight">
-          Forest Guide
+          Accountabuddy
         </h1>
         <div className="ml-auto flex items-center gap-2">
           {/* Audio toggle button */}

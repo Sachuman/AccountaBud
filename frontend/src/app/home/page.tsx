@@ -19,8 +19,8 @@ function Home() {
           <h1 className="flex text-7xl md:text-9xl items-center mt-4">
             {" "}
             {/* Added some margin-top for spacing if needed */}
-            🤖 Insert {"  "}
-            <LineShadowText>Name</LineShadowText>
+            Here comes {"  "}
+            <LineShadowText>Accountabuddy</LineShadowText>
           </h1>
         </div>
         <FallingText

@@ -149,7 +149,7 @@ export function SmoothCursor({
         rotation.set(accumulatedRotation.current);
         previousAngle.current = currentAngle;
 
-        scale.set(0.95);
+        scale.set(0.345);
         setIsMoving(true);
 
         const timeout = setTimeout(() => {
