@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUIMode } from "@/contexts/UIModeContext";
 import { useChat } from "@ai-sdk/react";
+import Orb from "@/components/Orb/Orb";
 
 export default function Home() {
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -152,16 +153,14 @@ export default function Home() {
           style={{
             boxShadow: "10px -10px 8px 2px hsl(var(--gradient-noise-top))",
           }}
-        >
-
-        </div>
+        ></div>
       </div>
       <header className="curved-header flex items-center gap-3 p-6 backdrop-blur shrink-0">
         <div className="shine-effect p-2 rounded-lg bg-background/20">
           <TreePine className="h-6 w-6 p-1 bg-emerald-950" />
         </div>
         <h1 className="text-2xl text-white font-semibold tracking-tight">
-          Accountabuddy
+          Accountabud
         </h1>
         <div className="ml-auto flex items-center gap-2">
           {/* Audio toggle button */}
@@ -253,6 +252,12 @@ export default function Home() {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
+            <Orb
+              hoverIntensity={0.5}
+              rotateOnHover={true}
+              hue={0}
+              forceHoverState={false}
+            />
             <TranscriptionButton
               onTranscriptionComplete={handleTranscriptionComplete}
               disabled={isLoading}

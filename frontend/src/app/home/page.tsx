@@ -20,7 +20,7 @@ function Home() {
             {" "}
             {/* Added some margin-top for spacing if needed */}
             Here comes {"  "}
-            <LineShadowText>Accountabuddy</LineShadowText>
+            <LineShadowText>Accountabud</LineShadowText>
           </h1>
         </div>
         <FallingText

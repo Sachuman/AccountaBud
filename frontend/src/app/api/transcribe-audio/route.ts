@@ -8,6 +8,7 @@ import os from "os";
 // Initialize the Groq client
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
+  
 });
 
 export async function POST(req: NextRequest) {
