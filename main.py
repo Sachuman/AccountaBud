@@ -160,7 +160,7 @@ Transcript: {transcript}
             # Add current date and timestamp
             item["created_at"] = now
 
-            if item["type"] == "RESTRICTION":
+            if item["type"] == "restriction":
                 # Store restriction in database
                 action_collection.insert_one(item)
                 print(f"Stored new restriction: {item}")
