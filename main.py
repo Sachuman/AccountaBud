@@ -64,6 +64,31 @@ async def root():
     return {"message": "Hello, World!"}
 
 
+@app.post("/call")
+async def make_call(request: Request):
+    to_number = (await request.json()).get("to_number")
+
+    if not to_number:
+        return {"status": "error", "message": "No phone number provided"}
+
+    print(f"Making call to {to_number}")
+
+    call_payload = {
+        "to_number": to_number,
+        "from_number": RETELL_PHONE_NUMBER,
+    }
+
+    response = requests.post(
+        "https://api.retellai.com/v2/create-phone-call",
+        headers=app.state.retell_headers,
+        json=call_payload,
+    )
+
+    if response.status_code == 200:
+        call_id = response.json().get("call_id")
+        return {"status": "success", "call_id": call_id}
+
+
 class BrowserUsage(BaseModel):
     date: str
     email: str
@@ -301,32 +326,40 @@ Agent: Wonderful! I'm excited to help you stay on track. I'll go ahead and wrap 
 # Webhook route to receive call completion notifications
 @app.post("/webhook")
 async def webhook(request: Request):
-    # Log the raw request
     data = await request.json()
 
-    if data["event"] == "call_ended":
-        call_id = data.get("call_id")
-        
-        # Check for disconnection reason
-        disconnection_reason = data.get("disconnection_reason")
-        if disconnection_reason in ["dial_busy", "dial_failed", "dial_no_answer"]:
-            print(f"CALL DECLINED: Call {call_id} was declined or not answered. Reason: {disconnection_reason}")
-            # You might want to handle declined calls differently here
-            # For example, reschedule the call or mark it as declined in your database
-        
-        print(f"Call ended notification received for call ID: {call_id}")
-        
-        # Continue with normal processing...
-        
-    elif data["event"] == "call_analyzed":
-        call_id = data.get("call_id")
-        print(f"Call analyzed notification received for call ID: {call_id}")
-        transcript = data["call"]["transcript"]
-        user_phone = data["call"]["from_number"]
-        print(f"Transcript: {transcript}")
-        await process_transcript(transcript, user_phone)
+    if data["event"] != "call_analyzed":
+        return {"status": "skipped"}
 
-    return {"status": "success"}
+    call_id = data.get("call_id")
+    print(f"Call analyzed notification received for call ID: {call_id}")
+    transcript = data["call"]["transcript"]
+    user_phone = data["call"]["from_number"]
+    print(f"Transcript: {transcript}")
+
+    if "voicemail" in transcript.lower() or "voice mail" in transcript.lower():
+        description = (
+            "This user's accountability buddy did not respond to their reminder call. "
+            "You might want to check in with them."
+        )
+        call_payload = {
+            "to_number": "+9493072284",
+            "from_number": RETELL_PHONE_NUMBER,
+            "override_agent_id": AGENT_ID_REMINDER,
+            "retell_llm_dynamic_variables": {"reminder_description": description},
+        }
+        response = requests.post(
+            "https://api.retellai.com/v2/create-phone-call",
+            headers=app.state.retell_headers,
+            json=call_payload,
+        )
+        if response.status_code == 200:
+            print("Voicemail detected, call made to +9493072284")
+        else:
+            print(f"Error making call to +9493072284: {response.text}")
+        return {"status": "skipped"}
+
+    await process_transcript(transcript, user_phone)
 
 
 if __name__ == "__main__":

@@ -4,12 +4,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const phone = document.getElementById("phoneInput").value;
         console.log("Phone number:", phone);
         try {
-            const res = await fetch("http://localhost:8000/call", {
+            const res = await fetch("http://accountabud.ngrok.app/call", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ phone })
+                body: JSON.stringify({ to_number: phone })
             });
             if (res.ok) {
                 console.log("Call request sent successfully");
